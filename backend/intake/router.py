@@ -29,6 +29,7 @@ router = APIRouter()
 
 class StartIntakeRequest(BaseModel):
     language: str = Field(default="en", description="Language code: en, hi, bn, ta, te, mr")
+    language_name: Optional[str] = Field(default=None, description="Optional readable language name")
     patient_name: Optional[str] = Field(default=None, description="Optional patient name")
 
 
@@ -43,6 +44,7 @@ class RespondIntakeRequest(BaseModel):
     session_id: str
     response: str
     response_type: str = Field(default="text", description="'text' or 'voice_transcript'")
+    language: Optional[str] = Field(default=None, description="Optional active language")
 
 
 class RespondIntakeResponse(BaseModel):

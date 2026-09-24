@@ -60,9 +60,21 @@ class IntakeTurnResult(BaseModel):
     is_complete: bool = False
 
 
+REVERSE_LANG_MAP = {
+    "english": "en",
+    "hindi": "hi",
+    "bengali": "bn",
+    "tamil": "ta",
+    "telugu": "te",
+    "marathi": "mr",
+}
+
+
 def get_first_question(language: str = "en") -> str:
     """Return an initial welcoming intake question in the selected language."""
-    return DEFAULT_FIRST_QUESTIONS.get(language, DEFAULT_FIRST_QUESTIONS["en"])
+    norm = (language or "en").strip().lower()
+    code = REVERSE_LANG_MAP.get(norm, norm)
+    return DEFAULT_FIRST_QUESTIONS.get(code, DEFAULT_FIRST_QUESTIONS.get(norm, DEFAULT_FIRST_QUESTIONS["en"]))
 
 
 def build_system_prompt(language: str = "en") -> str:
