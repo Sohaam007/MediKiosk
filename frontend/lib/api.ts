@@ -288,9 +288,15 @@ export async function respondToQuestion(
   responseType: "text" | "voice_transcript" = "text",
   language?: string
 ): Promise<RespondQuestionResponse> {
+  const fullLangName =
+    (language &&
+      ({ hi: "Hindi", bn: "Bengali", ta: "Tamil", te: "Telugu", mr: "Marathi" } as Record<string, string>)[language]) ||
+    language ||
+    "Hindi";
+
   const modifiedResponse =
     language && language !== "en"
-      ? `${response}\n[SYSTEM: You MUST translate your next question and all choices into ${language}. Do not reply in English.]`
+      ? `${response}\n\n=== CRITICAL INSTRUCTION ===\nYou MUST translate your ENTIRE next question and all choices into ${fullLangName}. You are strictly forbidden from replying in English. Return ONLY ${fullLangName} text.`
       : response;
 
   if (IS_MOCK_MODE) {
@@ -306,7 +312,7 @@ export async function respondToQuestion(
       response_type: responseType,
     };
     if (language) {
-      payload.language = langMap[language] || language;
+      payload.language = fullLangName;
     }
 
     const res = await fetch(`${API_BASE}/api/intake/respond`, {

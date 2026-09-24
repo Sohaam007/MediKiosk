@@ -51,13 +51,21 @@ export const Header: React.FC = () => {
           </div>
         </Link>
 
-        {/* Emergency Notice & Language Selector */}
+        {/* Emergency Notice, Clinician View & Language Selector */}
         <div className="flex items-center gap-3 md:gap-5">
           {/* Emergency Tag */}
           <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
             <PhoneCall className="w-4 h-4 text-red-600 animate-pulse" />
             <span>Emergency: Call 108 / 112</span>
           </div>
+
+          {/* Clinician Dashboard Quick Link for Evaluators / Staff */}
+          <Link
+            href="/clinician"
+            className="text-sm font-medium text-teal-700 hover:text-teal-900 underline underline-offset-4 hidden sm:inline-block"
+          >
+            Clinician View &rarr;
+          </Link>
 
           {/* Language Selector Dropdown */}
           <div className="relative" ref={dropdownRef}>

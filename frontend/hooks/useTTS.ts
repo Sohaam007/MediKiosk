@@ -165,13 +165,22 @@ export function useTTS(language: string = "en"): UseTTSReturn {
       const targetLocale = getLocale(language);
 
       try {
-        const utterance = new SpeechSynthesisUtterance(trimmedText);
-        utterance.lang = targetLocale;
-
         // Try getting latest voices if state hasn't populated yet
         const currentVoices =
           voices.length > 0 ? voices : window.speechSynthesis.getVoices();
         const matchedVoice = findBestVoice(targetLocale, currentVoices);
+
+        // If language !== 'en' and a matching regional voice cannot be found in the browser's voices array,
+        // do NOT fall back to a default/random voice (which causes browsers to read regional text in Spanish, etc.).
+        // Fail silently (do not call speechSynthesis.speak) so it doesn't read regional text with the wrong accent.
+        const isEnglish =
+          language.toLowerCase() === "en" || targetLocale.toLowerCase().startsWith("en");
+        if (!isEnglish && !matchedVoice) {
+          return;
+        }
+
+        const utterance = new SpeechSynthesisUtterance(trimmedText);
+        utterance.lang = targetLocale;
 
         if (matchedVoice) {
           utterance.voice = matchedVoice;

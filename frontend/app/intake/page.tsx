@@ -199,6 +199,7 @@ function cleanTextForTTS(rawText: string): string {
   return rawText
     .replace(/\[SYSTEM:[\s\S]*?\]/gi, "")
     .replace(/\[SYSTEM[\s\S]*?\]/gi, "")
+    .replace(/=== CRITICAL INSTRUCTION ===[\s\S]*?(?=\n\n|$)/gi, "")
     .trim();
 }
 
@@ -426,28 +427,15 @@ function IntakeChatScreen() {
         addTriageAlert(apiResp.triage_alert);
       }
 
-      // 5. Handle next question
-      if (apiResp.next_question) {
-        const aiMsg: MessageItem = {
-          id: `ai-${Date.now()}`,
-          sender: "ai",
-          role: "assistant",
-          text: apiResp.next_question,
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-        setQuestionType(apiResp.question_type || "text");
-        setChoices(apiResp.choices || []);
-      }
-
-      // 6. Handle intake completion
+      // 5. Handle intake completion vs next question
       if (apiResp.is_complete) {
         setIsComplete(true);
         setContextIsComplete(true);
         setProgress(1.0);
         setContextProgress(1.0);
 
-        // Completion announcement bubble
+        // Completion announcement bubble: only show the frontend's localized message,
+        // DO NOT append the backend's raw English completion message to chat history.
         const completionText = loc.completionText;
 
         setMessages((prev) => [
@@ -460,6 +448,17 @@ function IntakeChatScreen() {
             timestamp: new Date(),
           },
         ]);
+      } else if (apiResp.next_question) {
+        const aiMsg: MessageItem = {
+          id: `ai-${Date.now()}`,
+          sender: "ai",
+          role: "assistant",
+          text: apiResp.next_question,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        setQuestionType(apiResp.question_type || "text");
+        setChoices(apiResp.choices || []);
       }
     } catch (err) {
       console.error("Error communicating with clinical intake engine:", err);
