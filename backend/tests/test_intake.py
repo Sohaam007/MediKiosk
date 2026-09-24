@@ -1,10 +1,22 @@
 """
 Unit and integration tests for MediKiosk Backend & Clinical Intake Engine.
 """
+import sys
+from pathlib import Path
 from fastapi.testclient import TestClient
-from backend.main import app
-from backend import store
-from backend.intake.engine import _detect_fallback_triage, _clean_json_response
+
+backend_dir = Path(__file__).resolve().parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+try:
+    from backend.main import app
+    from backend import store
+    from backend.intake.engine import _detect_fallback_triage, _clean_json_response
+except ModuleNotFoundError:
+    from main import app
+    import store
+    from intake.engine import _detect_fallback_triage, _clean_json_response
 
 client = TestClient(app)
 
