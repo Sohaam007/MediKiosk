@@ -1,21 +1,37 @@
-# NNNN — Title in one line
+# NNNN: Title
 
-**Status:** proposed | accepted | superseded by [NNNN](NNNN-x.md)
-**Date:** YYYY-MM-DD
+> **Status:** proposed | accepted | deprecated | superseded
+> **Date:** YYYY-MM-DD
+> **Author:** @name
+> **Reviewers:** @name
 
 ## Context
 
-What forced a decision. Constraints, not narrative.
+What is the issue that we're seeing that motivates this decision or change?
 
 ## Decision
 
-What we are doing, in the present tense.
+What is the change that we're proposing and/or doing?
 
-## Alternatives rejected
+## Alternatives considered
 
-The obvious other options and the specific reason each lost. This section is the point of
-the document; without it the next person re-does the analysis.
+| Option | Pros | Cons |
+|---|---|---|
+| Option A | ... | ... |
+| Option B | ... | ... |
 
 ## Consequences
 
-What gets harder because of this. Be honest — a record with only upsides was not a decision.
+What becomes easier or more difficult to do because of this change?
+
+### Positive
+
+- ...
+
+### Negative
+
+- ...
+
+### Risks
+
+- ...

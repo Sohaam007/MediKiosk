@@ -11,13 +11,16 @@ Workflow:
 5. GET /api/fhir/bundle -> Retrieve FHIR OPConsultation bundle.
 """
 
-import sys
 import json
 import os
+import sys
 from pathlib import Path
+
 import requests
 
-BASE_URL = os.getenv("MEDIKIOSK_API_URL", "https://medikiosk-production-9938.up.railway.app").rstrip("/")
+BASE_URL = os.getenv(
+    "MEDIKIOSK_API_URL", "https://medikiosk-production-9938.up.railway.app"
+).rstrip("/")
 IMAGE_PATH = os.getenv("SAMPLE_PRESCRIPTION_PATH", "sample_prescription.jpg")
 
 
@@ -62,18 +65,17 @@ def run_e2e_test():
     # -------------------------------------------------------------------------
     print_step(1, "POST /api/intake/start (Start Clinical Intake)")
     start_url = f"{BASE_URL}/api/intake/start"
-    start_payload = {
-        "patient_id": "PATIENT_001",
-        "language": "en"
-    }
+    start_payload = {"patient_id": "PATIENT_001", "language": "en"}
     print(f"Request URL: {start_url}")
     print("Request Payload:")
     print_json(start_payload)
 
     resp_start = session.post(start_url, json=start_payload, timeout=30)
     print(f"Response Status: {resp_start.status_code}")
-    assert resp_start.status_code == 200, f"Expected 200, got {resp_start.status_code}: {resp_start.text}"
-    
+    assert resp_start.status_code == 200, (
+        f"Expected 200, got {resp_start.status_code}: {resp_start.text}"
+    )
+
     start_data = resp_start.json()
     print("Response Body:")
     print_json(start_data)
@@ -92,13 +94,11 @@ def run_e2e_test():
 
     try:
         with open(image_file_path, "rb") as img_file:
-            files = {
-                "file": (image_file_path.name, img_file, "image/jpeg")
-            }
+            files = {"file": (image_file_path.name, img_file, "image/jpeg")}
             # Optional query parameter or data if server tracks session for OCR
             data = {"session_id": session_id}
             resp_ocr = session.post(ocr_url, files=files, data=data, timeout=60)
-    except IOError as e:
+    except OSError as e:
         print(f"[ERROR] Failed to read image file: {e}")
         sys.exit(1)
 
@@ -119,7 +119,7 @@ def run_e2e_test():
         "session_id": session_id,
         "patient_id": "PATIENT_001",
         "consent_given": True,
-        "purpose": "ABDM_SHARING"
+        "purpose": "ABDM_SHARING",
     }
     print(f"Request URL: {consent_url}")
     print("Request Payload:")
@@ -127,7 +127,9 @@ def run_e2e_test():
 
     resp_consent = session.post(consent_url, json=consent_payload, timeout=30)
     print(f"Response Status: {resp_consent.status_code}")
-    assert resp_consent.status_code == 200, f"Expected 200, got {resp_consent.status_code}: {resp_consent.text}"
+    assert resp_consent.status_code == 200, (
+        f"Expected 200, got {resp_consent.status_code}: {resp_consent.text}"
+    )
 
     consent_data = resp_consent.json()
     print("Response Body:")
@@ -139,17 +141,16 @@ def run_e2e_test():
     # -------------------------------------------------------------------------
     print_step(4, "POST /api/summary/generate (Generate Clinical Summary)")
     summary_url = f"{BASE_URL}/api/summary/generate"
-    summary_payload = {
-        "session_id": session_id,
-        "target_language": "hi"
-    }
+    summary_payload = {"session_id": session_id, "target_language": "hi"}
     print(f"Request URL: {summary_url}")
     print("Request Payload:")
     print_json(summary_payload)
 
     resp_summary = session.post(summary_url, json=summary_payload, timeout=60)
     print(f"Response Status: {resp_summary.status_code}")
-    assert resp_summary.status_code == 200, f"Expected 200, got {resp_summary.status_code}: {resp_summary.text}"
+    assert resp_summary.status_code == 200, (
+        f"Expected 200, got {resp_summary.status_code}: {resp_summary.text}"
+    )
 
     summary_data = resp_summary.json()
     print("Response Body:")
@@ -167,7 +168,9 @@ def run_e2e_test():
 
     resp_fhir = session.get(fhir_url, params=params, timeout=30)
     print(f"Response Status: {resp_fhir.status_code}")
-    assert resp_fhir.status_code == 200, f"Expected 200, got {resp_fhir.status_code}: {resp_fhir.text}"
+    assert resp_fhir.status_code == 200, (
+        f"Expected 200, got {resp_fhir.status_code}: {resp_fhir.text}"
+    )
 
     fhir_data = resp_fhir.json()
     print("Response Body:")

@@ -1,527 +1,537 @@
-# Contracts
+# Domain Contracts
 
-**These types cross domain boundaries.** They are defined in `core/contracts/` as Pydantic models,
-and documented here with the prose that explains why each field exists. Widening a contract during
-a phase (adding a required field, removing an optional one, changing a type) requires an ADR
-accepted by the full team. Narrowing is always safe.
+This document defines the strict data contracts that cross module boundaries in the MediKiosk application. All models reside in `src/medikiosk/domain/contracts/` and use Pydantic for validation.
 
-Every contract is frozen at the P0 gate by CMP-1. After that, the types are the API between
-parallel tracks. If two agents disagree about a field, the contract is the source of truth.
+## 1. SessionState
 
----
-
-## 1. IntakeSession — what the clinical Q&A engine produces
+The root session object tracking intake progression.
+- **Produced By**: Session Service
+- **Consumed By**: All modules
 
 ```python
-class IntakeSession(BaseModel):
-    """A complete patient intake captured by the kiosk."""
+from pydantic import BaseModel, Field
+from uuid import UUID
+from datetime import datetime
+from enum import Enum
 
-    session_id: str                        # UUID, created at session start
-    patient_demographics: PatientDemographics
-    chief_complaint: str                   # free-text, patient's own words
-    chief_complaint_language: str           # ISO 639-1 code ("hi", "en", "bn", etc.)
-    socrates: SocratesAssessment | None     # populated when chief complaint is pain
-    history_of_present_illness: list[HpiEntry]
-    past_medical_history: list[str]
-    family_history: list[str]
-    drug_history: list[DrugHistoryEntry]
-    allergy_history: list[str]
-    social_history: SocialHistory
-    review_of_systems: dict[str, list[str]]  # system name → list of symptoms
-    dashavidha: DashavidhaPariksha | None    # populated when Ayurvedic assessment runs
-    triage_alerts: list[TriageAlert]        # red-flag alerts detected during intake
-    intake_language: str                    # primary language of the intake session
-    intake_duration_seconds: float
-    completed_at: datetime | None           # None if session was interrupted
-    consent_stamp: str | None               # set by core/consent/ before data leaves kiosk
+class SessionStatus(str, Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    TERMINATED = "terminated"
 
-class PatientDemographics(BaseModel):
-    name: str
-    age_years: int
-    sex: Literal["male", "female", "other"]
-    abha_id: str | None                    # ABHA ID, verified by CMP-5
-    phone: str | None
-    address: str | None
-    occupation: str | None
+class InformantType(str, Enum):
+    """Who is physically providing the clinical history at the kiosk.
 
-class SocratesAssessment(BaseModel):
-    """SOCRATES pain assessment — at least 3 of 7 dimensions required."""
-    site: str | None
-    onset: str | None
-    character: str | None
-    radiation: str | None
-    associations: str | None
-    time_course: str | None
-    exacerbating_relieving: str | None
-    severity: int | None                   # 0–10 NRS scale
+    In Indian hospitals, it is common for a relative, caregiver, or ASHA worker
+    to report on behalf of the patient (elderly, paediatric, non-verbal, or
+    illiterate patients). The medico-legal weight of a proxy informant differs
+    from the patient themselves — this field makes that distinction explicit
+    in the audit trail.
+    """
+    PATIENT = "patient"           # The patient is self-reporting
+    RELATIVE = "relative"         # A family member is reporting on their behalf
+    CAREGIVER = "caregiver"       # A professional caregiver (nurse, ASHA worker)
 
-class DashavidhaPariksha(BaseModel):
-    """Ayurvedic Dashavidha Pariksha — 10-fold patient assessment."""
-    prakriti: PrakritiType | None          # body constitution
-    vikriti: VikritiAssessment | None      # current imbalance
-    sara: SaraType | None                 # tissue essence
-    samhanana: SamhananaType | None       # body compactness
-    pramana: PramanaAssessment | None     # body measurement
-    satmya: SatmyaType | None            # adaptability
-    sattva: SattvaType | None            # mental strength
-    ahara_shakti: AharaShaktiType | None  # digestive capacity
-    vyayama_shakti: VyayamaShaktiType | None  # exercise capacity
-    vaya: VayaType | None                 # age group
+class SessionState(BaseModel):
+    """The root session state of a patient intake process."""
+    session_id: UUID = Field(..., description="Unique identifier for the session.")
+    patient_language: str = Field(..., description="Language code (e.g., 'en', 'hi').")
+    created_at: datetime = Field(..., description="Session start time in UTC.")
+    status: SessionStatus = Field(..., description="Current status of the session.")
+    consent_status: bool = Field(False, description="Has the user given DPDP consent.")
+    intake_progress: float = Field(0.0, ge=0.0, le=1.0, description="Completion percentage (0.0 to 1.0).")
 
-class HpiEntry(BaseModel):
-    symptom: str
-    onset: str | None
-    duration: str | None
-    severity: str | None
-    progression: str | None
+    # ── Enterprise: Proxy / Attendant Problem ──────────────────────────
+    informant_type: InformantType = Field(
+        InformantType.PATIENT,
+        description="Who is physically providing the clinical history. "
+                    "Defaults to PATIENT (self-reporting). Set to RELATIVE or "
+                    "CAREGIVER when a proxy is answering on behalf of the patient."
+    )
+    informant_relationship: str | None = Field(
+        None,
+        description="Relationship of the informant to the patient when "
+                    "informant_type is not PATIENT (e.g., 'spouse', 'son', "
+                    "'daughter', 'ASHA worker', 'parent'). Required when "
+                    "informant_type != PATIENT."
+    )
 
-class DrugHistoryEntry(BaseModel):
-    drug_name: str
-    dose: str | None
-    frequency: str | None
-    duration: str | None
-    is_current: bool
+    @model_validator(mode='after')
+    def validate_proxy_relationship(self) -> 'SessionState':
+        """Enforce that proxy sessions always record who the proxy is."""
+        if self.informant_type != InformantType.PATIENT and not self.informant_relationship:
+            raise ValueError(
+                f"informant_relationship is required when informant_type "
+                f"is {self.informant_type.value!r} (not 'patient')"
+            )
+        return self
 
-class SocialHistory(BaseModel):
-    smoking: str | None
-    alcohol: str | None
-    tobacco: str | None
-    diet: str | None                       # vegetarian, non-vegetarian, etc.
-    exercise: str | None
-    occupation_hazards: str | None
+# Example
+# {
+#   "session_id": "123e4567-e89b-12d3-a456-426614174000",
+#   "patient_language": "hi",
+#   "created_at": "2026-09-26T13:00:00Z",
+#   "status": "active",
+#   "consent_status": true,
+#   "intake_progress": 0.45,
+#   "informant_type": "relative",
+#   "informant_relationship": "son"
+# }
 ```
 
-**Who writes it:** `core/intake/` builds the `IntakeSession` progressively as the patient
-answers questions. INK-1 creates the demographics, INK-2 populates SOCRATES, INK-3 fills HPI
-and histories, INK-4 and INK-5 build Dashavidha, INK-6 attaches triage alerts.
+## 2. VoiceCapture
 
-**Who reads it:** SYN-1 consumes it for summary generation. INT-2 maps it to FHIR resources.
-EVL-5 scores its clinical completeness.
-
-**Security:** `consent_stamp` is `None` until the patient approves data sharing. No downstream
-module accepts an `IntakeSession` without a non-None stamp. This is the first half of the
-consent chokepoint (the second half is on `ABDMPayload`).
-
----
-
-## 2. VoiceCapture — what the speech pipeline produces
+Raw voice input data captured from the kiosk.
+- **Produced By**: API / Input Adapter
+- **Consumed By**: ASR Adapter / Intake Engine
 
 ```python
 class VoiceCapture(BaseModel):
-    """A single utterance captured by the microphone and processed by ASR."""
+    """Represents a voice recording snippet from the patient."""
+    session_id: UUID
+    audio_ref: str = Field(..., description="Storage reference/path to the audio file.")
+    transcript: str = Field(..., description="The ASR transcribed text.")
+    language: str = Field(..., description="Language code detected or set.")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="ASR confidence score.")
+    captured_at: datetime
 
-    capture_id: str                        # UUID
-    session_id: str                        # links to IntakeSession
-    audio_duration_ms: int
-    sample_rate_hz: int
-    language_detected: str                 # ISO 639-1
-    language_confidence: float             # 0.0–1.0
-    transcript: str                        # final ASR output
-    transcript_confidence: float           # 0.0–1.0
-    interim_results: list[InterimTranscript]  # streaming partials
-    is_final: bool                         # False during streaming
-    noise_level_db: float | None           # ambient noise estimate
-
-class InterimTranscript(BaseModel):
-    text: str
-    confidence: float
-    timestamp_ms: int                      # offset from utterance start
+    # ── Enterprise: Acoustic Biomarkers ────────────────────────────────
+    # Passive health telemetry extracted from the audio signal itself,
+    # independent of the transcript content. These are clinically meaningful:
+    # - Abnormally slow speech (< 100 wpm) may indicate neurological issues
+    # - Cough events are a respiratory red-flag signal
+    # - Long pauses may indicate confusion, pain, or cognitive difficulty
+    speech_rate_wpm: float | None = Field(
+        None,
+        ge=0.0,
+        description="Words per minute in the captured audio segment. "
+                    "Normal adult range: 120-150 wpm. Values below 100 may "
+                    "indicate neurological conditions (bradyphrenia)."
+    )
+    cough_events_detected: int = Field(
+        0,
+        ge=0,
+        description="Number of cough events detected in the audio via "
+                    "acoustic classifier. Persistent coughing across multiple "
+                    "captures triggers a respiratory triage flag."
+    )
+    max_pause_duration_seconds: float | None = Field(
+        None,
+        ge=0.0,
+        description="Longest contiguous silence/pause in the audio (seconds). "
+                    "Extended pauses (> 5s) may indicate confusion, distress, "
+                    "or difficulty understanding the question."
+    )
 ```
 
-**Who writes it:** `kiosk/speech/asr_worker.py` produces `VoiceCapture` from microphone audio.
-SPH-1 builds the core pipeline, SPH-3 adds Indian language models, SPH-4 adds streaming.
+## 3. IntakeQuestion
 
-**Who reads it:** `core/intake/` receives the transcript to drive the clinical questionnaire.
-EVL-8 measures WER per language against ground truth.
-
-**Clinical constraint:** the audio bytes are never stored beyond the session. Only the
-transcript persists in `IntakeSession`. The audio is held in memory during ASR processing
-and discarded. This is a DPDP minimisation requirement.
-
----
-
-## 3. DocumentScan — what the OCR pipeline produces
+A question posed to the patient by the clinical engine.
+- **Produced By**: Clinical Engine
+- **Consumed By**: Frontend API
 
 ```python
-class DocumentScan(BaseModel):
-    """A scanned document processed by the OCR pipeline."""
+class QuestionType(str, Enum):
+    OPEN_TEXT = "open_text"
+    SINGLE_CHOICE = "single_choice"
+    MULTI_CHOICE = "multi_choice"
+    NUMERIC_SCALE = "numeric_scale"
 
-    scan_id: str                           # UUID
-    session_id: str                        # links to IntakeSession
-    document_type: DocumentType            # prescription, lab_report, discharge_summary, other
-    image_width: int
-    image_height: int
-    ocr_lines: list[OcrLine]
-    raw_text: str                          # full concatenated text
-    ocr_language: str                      # detected document language
-    ocr_confidence: float                  # mean line confidence
-    scan_timestamp: datetime
+class ClinicalDomain(str, Enum):
+    DEMOGRAPHICS = "demographics"
+    CHIEF_COMPLAINT = "chief_complaint"
+    HPI = "hpi"
+    SOCRATES = "socrates"
+    PAST_MEDICAL = "past_medical"
+    DRUG_HISTORY = "drug_history"
+    ALLERGY = "allergy"
+    FAMILY = "family"
+    SOCIAL = "social"
+    REVIEW_OF_SYSTEMS = "review_of_systems"
+    DASHAVIDHA = "dashavidha"
 
+class IntakeQuestion(BaseModel):
+    """A question generated for the patient."""
+    question_text: str
+    question_type: QuestionType
+    choices: list[str] | None = None
+    clinical_domain: ClinicalDomain
+```
+
+## 4. IntakeResponse
+
+A response given by the patient to an `IntakeQuestion`.
+- **Produced By**: Frontend API
+- **Consumed By**: Clinical Engine
+
+```python
+class ResponseSource(str, Enum):
+    VOICE = "voice"
+    TOUCH = "touch"
+    TEXT = "text"
+
+class IntakeResponse(BaseModel):
+    """A patient's answer to a question."""
+    question_id: UUID
+    response_text: str
+    response_source: ResponseSource
+    extracted_data: dict = Field(default_factory=dict, description="Structured data parsed from response.")
+```
+
+## 5. IntakeSession
+
+The complete state of the clinical interview.
+- **Produced By**: Clinical Engine
+- **Consumed By**: Synthesis Engine
+
+```python
+class IntakeSession(BaseModel):
+    """The aggregate state of the patient's intake interview."""
+    session_id: UUID
+    questions_asked: list[IntakeQuestion] = Field(default_factory=list)
+    responses: list[IntakeResponse] = Field(default_factory=list)
+    clinical_data: dict = Field(default_factory=dict)
+    progress: float = Field(0.0, ge=0.0, le=1.0)
+    is_complete: bool = False
+    triage_alerts: list['TriageAlert'] = Field(default_factory=list)
+
+    # ── Enterprise: Conversation Frustration Index (CFI) ───────────────
+    # A running counter tracking communication breakdown signals. It
+    # increments on: low ASR confidence (< 0.4), repeated identical
+    # questions (user did not understand), long response pauses (> 10s),
+    # and explicit "I don't understand" responses. When CFI exceeds the
+    # threshold (default: 5), the system triggers a graceful human fallback
+    # — routing the patient to a staff registration desk.
+    #
+    # This protects both patient dignity (no frustrating loops) and data
+    # quality (garbage-in-garbage-out from misunderstood responses).
+    frustration_index: int = Field(
+        0,
+        ge=0,
+        description="Conversation Frustration Index. Increments on: "
+                    "low ASR confidence (< 0.4), repeated questions, "
+                    "long pauses (> 10s), explicit 'I don't understand'. "
+                    "Threshold for human fallback: 5."
+    )
+    frustration_threshold: int = Field(
+        5,
+        ge=1,
+        description="CFI value at which the system stops the AI conversation "
+                    "and routes the patient to a human registration desk."
+    )
+    human_fallback_triggered: bool = Field(
+        False,
+        description="Set to True when frustration_index >= frustration_threshold. "
+                    "Once True, no further AI questions are generated."
+    )
+```
+
+## 6. DocumentScan
+
+A medical document uploaded or scanned.
+- **Produced By**: API / Document Service
+- **Consumed By**: OCR Engine
+
+```python
 class DocumentType(str, Enum):
     PRESCRIPTION = "prescription"
     LAB_REPORT = "lab_report"
     DISCHARGE_SUMMARY = "discharge_summary"
-    REFERRAL_LETTER = "referral_letter"
-    IMAGING_REPORT = "imaging_report"
+    REFERRAL = "referral"
     OTHER = "other"
 
-class OcrLine(BaseModel):
-    text: str
-    confidence: float                      # 0.0–1.0
-    bounding_box: BoundingBox              # pixel coordinates
-    line_index: int
-
-class BoundingBox(BaseModel):
-    x_min: int
-    y_min: int
-    x_max: int
-    y_max: int
+class DocumentScan(BaseModel):
+    """A scanned physical medical document."""
+    scan_id: UUID
+    session_id: UUID
+    document_type: DocumentType
+    image_ref: str = Field(..., description="Storage reference to image.")
+    extracted_text: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
 ```
 
-**Who writes it:** `kiosk/ocr/pipeline.py` produces `DocumentScan`. OCR-1 builds the core
-pipeline, OCR-6 adds document type classification, OCR-2 adds handwriting recognition.
+## 7. MedicalEntity
 
-**Who reads it:** `core/extraction/` consumes `ocr_lines` to extract entities (EXT-1 through
-EXT-5). EVL-6 measures OCR accuracy against ground truth.
-
-**Clinical constraint:** the original image bytes are not stored after OCR processing. Only
-the structured `DocumentScan` persists. This prevents accidental retention of government IDs
-or other sensitive images captured alongside medical documents.
-
----
-
-## 4. MedicalEntity — what entity extraction produces
+Structured clinical data extracted from text.
+- **Produced By**: Extraction Engine (LLM/NLP)
+- **Consumed By**: Timeline, Synthesis, FHIR Generator
 
 ```python
-class MedicalEntity(BaseModel):
-    """A single medical entity extracted from text."""
-
-    entity_id: str                         # UUID
-    source_scan_id: str | None             # from OCR, or None if from intake transcript
-    entity_type: EntityType
-    text: str                              # as it appeared in the source
-    normalised_name: str                   # standardised form
-    code: str | None                       # SNOMED CT, ICD-10, LOINC, or ATC code
-    code_system: str | None                # "snomed_ct", "icd10", "loinc", "atc"
-    confidence: float                      # 0.0–1.0
-    span_start: int                        # character offset in source text
-    span_end: int
-    attributes: dict[str, str]             # entity-type-specific attributes
-
 class EntityType(str, Enum):
-    MEDICATION = "medication"              # drug name, with dose in attributes
-    DIAGNOSIS = "diagnosis"                # disease or condition
-    LAB_TEST = "lab_test"                  # test name, with value and unit in attributes
-    LAB_VALUE = "lab_value"                # numeric result
-    PROCEDURE = "procedure"                # surgery or medical procedure
-    SYMPTOM = "symptom"
+    MEDICATION = "medication"
+    DIAGNOSIS = "diagnosis"
+    LAB_TEST = "lab_test"
+    LAB_VALUE = "lab_value"
+    PROCEDURE = "procedure"
     ALLERGY = "allergy"
-    VITAL_SIGN = "vital_sign"
-    AYURVEDIC_FORMULATION = "ayurvedic_formulation"  # Ayurvedic drug, EXT-5
+    SYMPTOM = "symptom"
+
+class CodeSystem(str, Enum):
+    SNOMED_CT = "snomed_ct"
+    ICD10 = "icd10"
+    LOINC = "loinc"
+    ATC = "atc"
+    NONE = "none"
+
+class MedicalEntity(BaseModel):
+    """A structured medical entity extracted from text."""
+    entity_id: UUID
+    entity_type: EntityType
+    text: str
+    normalized_name: str | None = None
+    code_system: CodeSystem = CodeSystem.NONE
+    code: str | None = None
+    value: str | None = None
+    unit: str | None = None
+    reference_range: str | None = None
+    is_abnormal: bool | None = None
 ```
 
-**Who writes it:** `core/extraction/medications.py` (EXT-1), `diagnoses.py` (EXT-2),
-`lab_values.py` (EXT-3), `procedures.py` (EXT-4), `ayurvedic.py` (EXT-5).
+## 8. ClinicalTimeline
 
-**Who reads it:** `core/timeline/builder.py` (EXT-6) to construct the chronological timeline.
-`core/synthesis/summary_engine.py` (SYN-1) for the clinical summary. `core/fhir/observation.py`
-(INT-4) to map entities to FHIR Observation resources.
-
-**Coding constraint:** every entity SHOULD have a code. When the extraction model cannot map
-to a standard code, `code` is `None` and `confidence` is the model's uncertainty. SYN-3 adds
-codes for entities that extraction missed. EVL-7 measures entity F1 with and without codes.
-
----
-
-## 5. ClinicalTimeline — what the timeline builder produces
+Chronological record of the patient's medical history.
+- **Produced By**: Clinical Engine
+- **Consumed By**: Frontend, Summary Engine
 
 ```python
-class ClinicalTimeline(BaseModel):
-    """Chronological sequence of clinical events from all sources."""
+from datetime import date
 
-    session_id: str
-    events: list[TimelineEvent]
-    earliest_date: date | None
-    latest_date: date | None
+class EventSource(str, Enum):
+    INTAKE = "intake"
+    OCR = "ocr"
+    HISTORY = "history"
 
 class TimelineEvent(BaseModel):
-    event_id: str                          # UUID
-    date: date | None                      # resolved date, or None if unresolvable
-    date_text: str                         # original text ("2 months ago", "Jan 2024")
-    date_precision: Literal["day", "month", "year", "approximate"]
-    event_type: EntityType                 # reuses MedicalEntity types
+    date: date | None = None
     description: str
-    source: Literal["intake", "ocr"]       # which pipeline produced this event
-    source_entity_ids: list[str]           # MedicalEntity IDs that contributed
-    is_current: bool                       # ongoing vs resolved
+    source: EventSource
+    entities: list[MedicalEntity] = Field(default_factory=list)
+
+class ClinicalTimeline(BaseModel):
+    """Chronological patient timeline built from intake and docs."""
+    session_id: UUID
+    events: list[TimelineEvent] = Field(default_factory=list)
 ```
 
-**Who writes it:** `core/timeline/builder.py` (EXT-6). It merges entities from intake
-and OCR, resolves relative dates ("2 months ago") against the session date, deduplicates
-entries that describe the same event from different sources, and sorts chronologically.
+## 9. TriageAlert
 
-**Who reads it:** SYN-1 uses it to produce the history narrative. INT-4 maps events to
-FHIR DiagnosticReport resources. EVL-7 scores timeline ordering accuracy.
-
----
-
-## 6. ClinicalSummary — what the synthesis engine produces
+Emergency notification triggered by red flags.
+- **Produced By**: Triage Engine
+- **Consumed By**: Notification Service, Frontend
 
 ```python
-class ClinicalSummary(BaseModel):
-    """Physician-ready structured clinical summary in bilingual format."""
+class TriagePriority(str, Enum):
+    CRITICAL = "critical"
+    URGENT = "urgent"
+    NORMAL = "normal"
 
-    session_id: str
-    summary_version: int                   # incremented on each regeneration
-    sections: list[SummarySection]
-    primary_language: str                  # "hi" or regional language
-    secondary_language: str                # "en" always
-    generated_at: datetime
-    model_id: str                          # which LLM produced this summary
-    model_confidence: float
-
-class SummarySection(BaseModel):
-    section_type: SummarySectionType
-    title_primary: str                     # in patient's language
-    title_secondary: str                   # in English
-    content_primary: str
-    content_secondary: str
-    source_entity_ids: list[str]           # traceable to source data
-    snomed_codes: list[str]                # SNOMED CT codes cited in this section
-
-class SummarySectionType(str, Enum):
-    DEMOGRAPHICS = "demographics"
-    CHIEF_COMPLAINT = "chief_complaint"
-    HPI = "history_of_present_illness"
-    PAST_HISTORY = "past_medical_history"
-    FAMILY_HISTORY = "family_history"
-    DRUG_HISTORY = "drug_history"
-    ALLERGY_HISTORY = "allergy_history"
-    SOCIAL_HISTORY = "social_history"
-    REVIEW_OF_SYSTEMS = "review_of_systems"
-    EXAMINATION_FINDINGS = "examination_findings"
-    AYURVEDIC_ASSESSMENT = "ayurvedic_assessment"
-    INVESTIGATION_SUMMARY = "investigation_summary"
-    TIMELINE = "timeline"
-    TRIAGE_ALERTS = "triage_alerts"
+class TriageAlert(BaseModel):
+    """Alert indicating an emergency or urgent symptom."""
+    alert_id: UUID
+    priority: TriagePriority
+    rule_name: str
+    trigger_text: str
+    recommended_action: str
+    created_at: datetime
 ```
 
-**Who writes it:** `core/synthesis/summary_engine.py` (SYN-1) generates the core summary.
-`core/synthesis/bilingual.py` (SYN-2) ensures bilingual parity.
-`core/synthesis/ayurvedic_section.py` (SYN-4) adds the Ayurvedic assessment section.
+## 10. ConsentRecord
 
-**Who reads it:** `kiosk/ui/summary_review.py` (UIK-5) renders it for the physician.
-`core/fhir/op_consultation.py` (INT-2) maps it to the FHIR OPConsultation bundle.
-EVL-9 measures physician acceptance quality.
-
----
-
-## 7. ConsentRecord — what the consent module produces
+DPDP compliant consent audit trail.
+- **Produced By**: Consent Service
+- **Consumed By**: ABDM Gateway, Database
 
 ```python
-class ConsentRecord(BaseModel):
-    """DPDP Act 2023 compliant patient consent."""
-
-    consent_id: str                        # UUID
-    session_id: str
-    patient_abha_id: str | None
-    consent_purpose: ConsentPurpose
-    data_categories: list[str]             # what data types are consented
-    granted_at: datetime
-    expires_at: datetime                   # retention expiry
-    revoked_at: datetime | None
-    consent_text_shown: str                # exact text displayed to patient
-    consent_language: str                  # language in which consent was shown
-    patient_confirmation_method: Literal["touch", "voice", "biometric"]
-    audit_hash: str                        # SHA-256 of the consent payload
-    chain_previous_hash: str | None        # hash chain link to previous consent
-
 class ConsentPurpose(str, Enum):
     CLINICAL_INTAKE = "clinical_intake"
-    RECORD_DIGITIZATION = "record_digitization"
+    DOCUMENT_DIGITIZATION = "document_digitization"
     ABDM_SHARE = "abdm_share"
-    ANALYTICS_ANONYMIZED = "analytics_anonymized"
+
+class VerificationMethod(str, Enum):
+    TOUCH = "touch"
+    BIOMETRIC = "biometric"
+    VERBAL = "verbal"
+
+class ConsentRecord(BaseModel):
+    """DPDP compliant consent record."""
+    consent_id: UUID
+    session_id: UUID
+    purpose: ConsentPurpose
+    granted: bool
+    granted_at: datetime
+    consent_text_hash: str = Field(..., description="SHA-256 hash of the consent text shown.")
+    ip_address: str | None = None
+    verification_method: VerificationMethod
 ```
 
-**Who writes it:** `core/consent/dpdp.py` (CMP-2) creates the record after the patient
-explicitly approves. `core/consent/audit_chain.py` (CMP-4) builds the hash chain.
+## 11. ClinicalSummary
 
-**Who reads it:** every module that attempts to move data beyond the session checks for a
-valid `ConsentRecord`. `server/abdm/` refuses to construct an `ABDMPayload` without one.
-EVL-12 validates consent compliance.
+Bilingual synthesized summary for doctors.
+- **Produced By**: Synthesis Engine
+- **Consumed By**: Frontend API, PDF Generator
 
-**Immutable:** `consent_text_shown` is stored verbatim and immutably. It is the legal
-evidence that the patient was informed. It must not be regenerated or paraphrased.
+```python
+class SummarySection(BaseModel):
+    title: str
+    content_en: str
+    content_local: str
+    clinical_domain: str
+    source_entities: list[UUID] = Field(default_factory=list, description="References to MedicalEntity.entity_id")
 
----
+class ClinicalSummary(BaseModel):
+    """A bilingual summary output for the clinician."""
+    summary_id: UUID
+    session_id: UUID
+    sections: list[SummarySection] = Field(default_factory=list)
+```
 
-## 8. FHIRBundle — what the FHIR module produces
+## 12. FHIRBundle
+
+A validated FHIR R4 document.
+- **Produced By**: FHIR Generator
+- **Consumed By**: ABDM Adapter
 
 ```python
 class FHIRBundle(BaseModel):
-    """FHIR R4 OPConsultation bundle ready for ABDM submission."""
+    """Generated FHIR R4 Bundle resource."""
+    bundle_id: UUID
+    session_id: UUID
+    bundle_json: dict = Field(..., description="The raw FHIR R4 JSON object.")
+    resource_count: int
+    validation_passed: bool
+    validation_errors: list[str] = Field(default_factory=list)
+    generated_at: datetime
 
-    bundle_id: str                         # UUID
-    session_id: str
-    bundle_type: Literal["document"]       # OPConsultation is a document bundle
-    fhir_version: Literal["4.0.1"]
-    composition_id: str                    # FHIR Composition resource ID
-    patient_resource_id: str
-    encounter_resource_id: str
-    observation_ids: list[str]
-    diagnostic_report_ids: list[str]
-    medication_statement_ids: list[str]
-    bundle_json: str                       # serialised FHIR JSON
-    validation_passed: bool                # HAPI FHIR validator result
-    validation_errors: list[str]           # empty if passed
-
-    # Do not add fields from IntakeSession here. This type carries
-    # the FHIR JSON and its validation status, not the clinical data.
+    # ── Enterprise: Medico-Legal Hash ──────────────────────────────────
+    # SHA-256 hash of the concatenated source transcripts (all VoiceCapture
+    # transcripts + all DocumentScan extracted_text) that were used to
+    # produce this bundle. This creates a tamper-evident, cryptographic
+    # link between what the patient actually said / submitted and the
+    # clinical record generated from it.
+    #
+    # In Indian tort law and consumer protection cases, a hospital may
+    # need to prove that the AI-generated record faithfully reflects the
+    # patient's own statements. This hash, combined with the event-sourced
+    # audit trail, provides that evidentiary chain.
+    source_transcript_hash: str = Field(
+        ...,
+        description="SHA-256 hash of all source transcripts and OCR text "
+                    "used to generate this bundle. Proves cryptographic "
+                    "linkage between raw patient input and FHIR output "
+                    "for medico-legal defence."
+    )
 ```
 
-**Who writes it:** `core/fhir/bundle_builder.py` (INT-2) assembles the bundle from a
-`ClinicalSummary` and `MedicalEntity` list. INT-3 generates Patient and Encounter resources.
-INT-4 generates Observation and DiagnosticReport resources.
+## 13. ABDMPayload
 
-**Who reads it:** `server/abdm/fhir_push.py` (INT-5) transmits it to the HIS via ABDM.
-EVL-12 runs FHIR validation.
-
-**Invariant:** `validation_passed` must be `True` before `server/abdm/` accepts the bundle.
-A bundle with validation errors is never transmitted.
-
----
-
-## 9. ABDMPayload — what crosses the ABDM boundary
+Transmission wrapper for pushing to ABDM gateway.
+- **Produced By**: Integration Service
+- **Consumed By**: ABDM Adapter
 
 ```python
 class ABDMPayload(BaseModel):
-    """The envelope that leaves the kiosk and enters the health network."""
-
-    payload_id: str                        # UUID
-    session_id: str
-    consent_id: str                        # must match a valid ConsentRecord
-    consent_stamp: str                     # cryptographic stamp from consent module
-    abha_id: str                           # verified ABHA ID
-    fhir_bundle_id: str                    # references FHIRBundle
-    fhir_json: str                         # the bundle JSON to transmit
-    destination: str                       # ABDM HIP/HIU endpoint
-    created_at: datetime
-    transmitted_at: datetime | None        # set after successful push
-    transmission_status: Literal["pending", "sent", "failed", "acknowledged"]
-    audit_hash: str                        # SHA-256, linked to consent audit chain
+    """Payload envelope for transmission to the ABDM gateway."""
+    payload_id: UUID
+    session_id: UUID
+    consent_record_id: UUID
+    fhir_bundle_id: UUID
+    abha_id: str | None = None
+    pushed: bool = False
+    pushed_at: datetime | None = None
+    push_error: str | None = None
 ```
 
-**Who writes it:** `server/abdm/fhir_push.py` (INT-5).
+## 14. EvalResult
 
-**Who reads it:** only the ABDM gateway. This type does not flow back into the application.
-EVL-12 validates the payload structure.
-
-**The second chokepoint:** `ABDMPayload` requires both `consent_id` and `consent_stamp`.
-The stamp is a value that only `core/consent/` can produce. `server/abdm/` verifies the
-stamp before transmitting. If the stamp is invalid or missing, transmission is refused.
-
----
-
-## 10. SessionState — what the kiosk session manager produces
-
-```python
-class SessionState(BaseModel):
-    """Lifecycle state of a single kiosk session."""
-
-    session_id: str                        # UUID
-    status: SessionStatus
-    created_at: datetime
-    last_activity_at: datetime
-    max_idle_seconds: int                  # auto-terminate after this idle period
-    max_duration_seconds: int              # hard limit on session length
-    patient_language: str                  # ISO 639-1
-    intake_progress: float                 # 0.0–1.0, fraction of questionnaire completed
-    documents_scanned: int
-    summary_generated: bool
-    consent_granted: bool
-    fhir_submitted: bool
-    data_purged: bool                      # set True after session data is wiped
-
-class SessionStatus(str, Enum):
-    ACTIVE = "active"
-    PAUSED = "paused"                      # patient stepped away, auto-pause after idle
-    COMPLETED = "completed"                # full workflow finished
-    TERMINATED = "terminated"              # auto-terminated after timeout
-    PURGED = "purged"                      # all session data wiped from local storage
-```
-
-**Who writes it:** `kiosk/session/lifecycle.py` manages the session state.
-
-**Who reads it:** `kiosk/ui/` uses it to render the progress indicator (UIK-4).
-`kiosk/ui/idle_screen.py` (UIK-7) reads it for auto-lock decisions.
-`core/consent/` checks `status` before accepting new consent.
-
-**Data lifecycle:** when `status` transitions to `PURGED`, all session data — intake,
-OCR images, audio, summaries — is deleted from local storage. `data_purged` is the
-evidence for DPDP retention compliance.
-
----
-
-## 11. TriageAlert — what the red-flag detector produces
-
-```python
-class TriageAlert(BaseModel):
-    """An emergency signal detected during clinical intake."""
-
-    alert_id: str                          # UUID
-    session_id: str
-    priority: TriagePriority
-    trigger_symptom: str                   # the symptom that triggered the alert
-    trigger_source: Literal["socrates", "hpi", "review_of_systems", "vitals"]
-    rule_id: str                           # which red-flag rule fired
-    rule_description: str                  # human-readable rule explanation
-    recommended_action: str                # e.g., "Refer to emergency department immediately"
-    detected_at: datetime
-    acknowledged_by_staff: bool            # set True when a staff member sees it
-
-class TriagePriority(str, Enum):
-    CRITICAL = "critical"                  # life-threatening, immediate action
-    URGENT = "urgent"                      # needs attention within minutes
-    SEMI_URGENT = "semi_urgent"            # needs attention within hours
-    NON_URGENT = "non_urgent"              # can wait for scheduled appointment
-```
-
-**Who writes it:** `core/triage/red_flag_rules.py` (INK-6) fires rules against the intake
-data in real time.
-
-**Who reads it:** `kiosk/ui/` displays the alert to staff immediately (UIK-4).
-`core/synthesis/` includes triage alerts in the summary (SYN-1).
-EVL-10 measures triage sensitivity and specificity.
-
-**Clinical safety:** a `CRITICAL` alert pauses the intake questionnaire and displays a
-full-screen alert on the kiosk. The system does not proceed until a staff member
-acknowledges the alert.
-
----
-
-## 12. EvalResult — what the evaluation harness records
+Evaluation metric for the AI evaluation harness.
+- **Produced By**: Evaluation Harness
+- **Consumed By**: CI/CD, Reporting Tools
 
 ```python
 class EvalResult(BaseModel):
-    """A single metric measurement from the evaluation harness."""
-
-    metric_id: str                         # e.g., "ocr.accuracy.printed"
-    value: float
-    unit: str                              # e.g., "ratio", "ms", "wer"
-    corpus: str                            # which corpus was used
-    split: str                             # "dev" or "held_out"
-    timestamp: datetime
-    commit_sha: str                        # git commit
-    rubric_criterion: int                  # 1–5, mapped by eval/metrics/rubric_map.py
-    metadata: dict[str, str]               # language, document type, etc.
+    """Result from automated evaluation suite on a given scenario."""
+    eval_id: UUID
+    metric_name: str
+    scenario_id: str
+    score: float
+    threshold: float
+    passed: bool
+    details: dict = Field(default_factory=dict)
+    evaluated_at: datetime
 ```
 
-**Who writes it:** `eval/metrics/*.py` — one file per measurement domain. Each metric
-file produces `EvalResult` records.
+## 15. AuditEvent
 
-**Who reads it:** `eval/scenarios/clinical_runner.py` (EVL-11) aggregates results.
-EVL-14's rubric report groups results by `rubric_criterion`.
-EVL-13's ratchet compares current results against baselines.
+Append-only medico-legal audit trail event. See `ARCHITECTURE.md § Event-sourced medico-legal audit trail`.
+- **Produced By**: All services (via audit port)
+- **Consumed By**: Audit Repository (append-only), Compliance Reporting
 
-**The ratchet:** a metric that regresses beyond its tolerance in `eval/baselines/tolerances.json`
-fails CI. This prevents silent quality degradation.
+```python
+class AuditEventType(str, Enum):
+    """Every user-visible interaction at the kiosk.
+
+    Events are append-only: no UPDATE, no DELETE on the events table. Ever.
+    Payloads store hashes and references, never raw PHI.
+    """
+    SESSION_CREATED     = "session_created"
+    LANGUAGE_SELECTED   = "language_selected"
+    INFORMANT_DECLARED  = "informant_declared"       # proxy/attendant set
+    CONSENT_GRANTED     = "consent_granted"
+    CONSENT_REVOKED     = "consent_revoked"
+    VOICE_CAPTURED      = "voice_captured"            # transcript hash, NOT transcript
+    QUESTION_GENERATED  = "question_generated"        # question text (not PHI)
+    RESPONSE_RECEIVED   = "response_received"         # response hash, NOT response text
+    BUTTON_TAPPED       = "button_tapped"             # UI element identifier
+    DOCUMENT_SCANNED    = "document_scanned"          # scan_id, doc_type
+    TRIAGE_ALERT_FIRED  = "triage_alert_fired"        # alert_id, priority
+    CFI_INCREMENTED     = "cfi_incremented"            # new CFI value + reason
+    HUMAN_FALLBACK      = "human_fallback_triggered"
+    SUMMARY_GENERATED   = "summary_generated"         # summary_id
+    FHIR_BUNDLE_CREATED = "fhir_bundle_created"       # bundle_id, transcript_hash
+    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"       # success/failure
+    SESSION_COMPLETED   = "session_completed"
+    WALK_AWAY_DETECTED  = "walk_away_detected"        # fires at 15s no-presence (the trigger)
+    SESSION_PURGED      = "session_purged"             # fires after purge completes (the effect)
+
+class AuditEvent(BaseModel):
+    """A single immutable audit event in the medico-legal trail.
+
+    Events are strictly append-only. The database adapter and a database-level
+    trigger both enforce that no UPDATE or DELETE is ever executed on the
+    events table. tests/invariants/test_audit_trail.py verifies this.
+    """
+    event_id: UUID = Field(..., description="Unique identifier for this event.")
+    session_id: UUID = Field(..., description="Session this event belongs to.")
+    event_type: AuditEventType = Field(..., description="What happened.")
+    timestamp: datetime = Field(..., description="UTC time the event was recorded.")
+    payload: dict = Field(
+        default_factory=dict,
+        description="Event-specific metadata. MUST NOT contain raw PHI. "
+                    "Use SHA-256 hashes for sensitive data (transcripts, responses). "
+                    "Use references (scan_id, alert_id) for linked entities."
+    )
+    sequence_number: int = Field(
+        ...,
+        ge=0,
+        description="Monotonically increasing sequence number within the session. "
+                    "Guarantees total ordering of events for a single session."
+    )
+
+# Example
+# {
+#   "event_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+#   "session_id": "123e4567-e89b-12d3-a456-426614174000",
+#   "event_type": "voice_captured",
+#   "timestamp": "2026-09-26T13:05:32Z",
+#   "payload": {
+#     "transcript_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+#     "language": "hi",
+#     "confidence": 0.87,
+#     "speech_rate_wpm": 128.5,
+#     "cough_events": 0
+#   },
+#   "sequence_number": 7
+# }
+```
+

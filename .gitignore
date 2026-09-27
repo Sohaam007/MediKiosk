@@ -1,34 +1,70 @@
-# Python
+# ============================================================================
+# MediKiosk .gitignore
+# ============================================================================
+
+# ─── Python ───────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# ─── Virtual Environments ────────────────────────────────────────────────
 .venv/
 venv/
-.pytest_cache/
+env/
+.uv/
+
+# ─── Environment & Secrets ───────────────────────────────────────────────
 .env
 .env.local
+.env.*.local
+*.pem
+*.key
 
-# Node / Next.js
+# ─── Database ────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+medikiosk.db
+
+# ─── Uploaded Patient Data ───────────────────────────────────────────────
+data/uploads/
+data/sessions/
+
+# ─── IDE ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── OS ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Node / Next.js (frontend) ──────────────────────────────────────────
 node_modules/
 .next/
 out/
 frontend/.env.local
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# ─── Testing ──────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Reports (generated)
+# ─── Eval reports (regenerated) ──────────────────────────────────────────
 eval/reports/*.json
-eval/reports/*.md
+eval/reports/*.html
 
-# Build
-dist/
-build/
-*.egg-info/
+# ─── Build artifacts ─────────────────────────────────────────────────────
+*.tar.gz
+*.whl
