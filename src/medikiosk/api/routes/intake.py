@@ -21,11 +21,12 @@ from typing import Annotated
 from uuid import uuid4
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from medikiosk.api.dependencies.auth import require_kiosk_or_clinician
 from medikiosk.api.dependencies.container import (
     get_intake_service_dep,
+    get_pmjay_adapter_dep,
     get_session_service_dep,
 )
 from medikiosk.api.schemas.intake import (
@@ -35,8 +36,10 @@ from medikiosk.api.schemas.intake import (
     RespondResponse,
     StartSessionRequest,
     StartSessionResponse,
+    VerifyPMJAYRequest,
 )
-from medikiosk.domain.contracts import InformantType
+from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult
+from medikiosk.ports.insurance import PMJAYEligibilityPort
 from medikiosk.services.intake_service import IntakeService
 from medikiosk.services.session_service import SessionService
 
@@ -221,3 +224,43 @@ async def purge_session(
         purged=True,
         message="Session purged successfully.",
     )
+
+
+PMJAYEligibilityDep = Annotated[PMJAYEligibilityPort, Depends(get_pmjay_adapter_dep)]
+
+
+@router.post("/api/intake/verify-pmjay", response_model=PMJAYVerificationResult)
+async def verify_pmjay(
+    body: VerifyPMJAYRequest,
+    current_user: _KioskOrClinicianDep,
+    session_svc: SessionServiceDep,
+    pmjay_adapter: PMJAYEligibilityDep,
+) -> PMJAYVerificationResult:
+    """Verify PM-JAY eligibility and update session billing status."""
+    session = await session_svc.get_session(body.session_id)
+
+    try:
+        result = await pmjay_adapter.check_eligibility(
+            abha_number=body.abha_number,
+            pmjay_id=body.pmjay_id,
+        )
+    except Exception as e:
+        log.warning(
+            "pmjay_verification_failed",
+            session_id=str(session.session_id),
+            error_type=type(e).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Verification unavailable, please proceed to manual billing desk.",
+        ) from e
+
+    if result.eligible:
+        await session_svc.update_billing_status(
+            session_id=session.session_id,
+            billing_status="PMJAY_CASHLESS",
+            total_fees_inr=0,
+        )
+
+    return result
+

@@ -249,6 +249,48 @@ async def test_session_repo_create_and_get(db_session_factory) -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_repo_persists_billing_and_wayfinding_fields(db_session_factory) -> None:
+    """Verify SQLSessionRepository persists token, chamber, and billing fields."""
+    factory = db_session_factory
+    session_id = uuid4()
+    domain_session = SessionState(
+        session_id=session_id,
+        patient_language="hi",
+        created_at=NOW,
+        status=SessionStatus.ACTIVE,
+        token_number="CARD-R-14",  # noqa: S106
+        chamber_room="Room 302",
+        billing_status="STANDARD",
+        total_fees_inr=500,
+    )
+    async with factory() as db:
+        repo = SQLSessionRepository(db)
+        await repo.create(domain_session)
+
+        # Retrieve and verify all fields preserved
+        fetched = await repo.get(session_id)
+        assert fetched is not None
+        assert fetched.token_number == "CARD-R-14"  # noqa: S105
+        assert fetched.chamber_room == "Room 302"
+        assert fetched.billing_status == "STANDARD"
+        assert fetched.total_fees_inr == 500
+
+        # Update billing fields
+        updated_domain = fetched.model_copy(
+            update={"billing_status": "PMJAY_CASHLESS", "total_fees_inr": 0}
+        )
+        await repo.update(updated_domain)
+
+        # Verify update persisted
+        re_fetched = await repo.get(session_id)
+        assert re_fetched is not None
+        assert re_fetched.billing_status == "PMJAY_CASHLESS"
+        assert re_fetched.total_fees_inr == 0
+        await db.commit()
+
+
+
+@pytest.mark.asyncio
 async def test_session_repo_get_missing_returns_none(db_session_factory) -> None:
     async with db_session_factory() as db:
         repo = SQLSessionRepository(db)

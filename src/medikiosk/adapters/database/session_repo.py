@@ -38,6 +38,10 @@ class SQLSessionRepository:
             intake_progress=domain.intake_progress,
             informant_type=domain.informant_type.value,
             informant_relationship=domain.informant_relationship,
+            token_number=domain.token_number,
+            chamber_room=domain.chamber_room,
+            billing_status=domain.billing_status,
+            total_fees_inr=domain.total_fees_inr,
         )
 
     @staticmethod
@@ -52,6 +56,10 @@ class SQLSessionRepository:
             intake_progress=model.intake_progress,
             informant_type=InformantType(model.informant_type),
             informant_relationship=model.informant_relationship,
+            token_number=model.token_number,
+            chamber_room=model.chamber_room,
+            billing_status=model.billing_status,
+            total_fees_inr=model.total_fees_inr,
         )
 
     async def create(self, session: SessionState) -> SessionState:
@@ -90,6 +98,10 @@ class SQLSessionRepository:
             model.intake_progress = session.intake_progress
             model.informant_type = session.informant_type.value
             model.informant_relationship = session.informant_relationship
+            model.token_number = session.token_number
+            model.chamber_room = session.chamber_room
+            model.billing_status = session.billing_status
+            model.total_fees_inr = session.total_fees_inr
             await self._session.flush()
             log.info("session_updated", session_id=str(session.session_id))
             return session

@@ -30,6 +30,23 @@
 
 ---
 
+## Phase X.1 & X.4: PM-JAY Cashless Intake & Virtual Waiting Room
+
+**Status:** ✅ Implemented & Hardened.
+
+**Accomplishments:**
+- ✅ **ADR-0005**: Recorded contract widening for `SessionState` (`billing_status`, `total_fees_inr`).
+- ✅ **Contracts & Protocols**: Created `PMJAYVerificationResult` and defined ports `PMJAYEligibilityPort` & `NotificationPort`.
+- ✅ **Adapters**: Implemented `MockPMJAYAdapter` (NHA Golden Card gateway simulation with deterministic verification rules) and `MockWhatsAppNotificationAdapter` (bilingual SMS/WhatsApp paging).
+- ✅ **Endpoints**:
+  - `POST /api/intake/verify-pmjay`: Verifies Golden Card eligibility, updates billing status to `"PMJAY_CASHLESS"` with ₹0 fees, and gracefully handles gateway timeouts.
+  - `POST /api/clinician/queue/page-patient`: Paging alerts with E.164 phone sanitization (supporting 10-digit, 11-digit `0`-prefixed, and 12-digit formats) and session timeline auditing (`PATIENT_PAGED`).
+- ✅ **Database & ORM**: Synchronized `SessionModel` and `SQLSessionRepository` to persist `token_number`, `chamber_room`, `billing_status`, and `total_fees_inr`.
+- ✅ **Security**: Scrubbed all exception logging to prevent upstream PHI leakage (`error_type` instead of raw `str(e)`).
+- ✅ **Test Health**: 93+ passing tests across unit, integration, invariant, and E2E suites. Zero mypy or ruff errors.
+
+---
+
 ## Phase 7 — Architecture Backlog: Hospital Front-Door OS (planning ✅ complete)
 
 MediKiosk has been benchmarked against leading Indian hospital enterprise systems

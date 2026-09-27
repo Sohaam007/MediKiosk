@@ -57,6 +57,14 @@ class SessionState(BaseModel):
                     "informant_type != PATIENT."
     )
 
+    # ── Enterprise: Acuity, Wayfinding & PM-JAY Billing ───────────────
+    token_number: str | None = Field(None, description="Queue token (e.g. 'CARD-R-14').")
+    chamber_room: str | None = Field(None, description="Assigned room/chamber.")
+    billing_status: str | None = Field(
+        None, description="Billing status: 'STANDARD', 'PMJAY_CASHLESS', 'WAIVED_EMERGENCY'."
+    )
+    total_fees_inr: int = Field(0, description="Total fees in INR.")
+
     @model_validator(mode='after')
     def validate_proxy_relationship(self) -> 'SessionState':
         """Enforce that proxy sessions always record who the proxy is."""
@@ -534,4 +542,23 @@ class AuditEvent(BaseModel):
 #   "sequence_number": 7
 # }
 ```
+
+## 12. PMJAYVerificationResult
+
+Golden Card PM-JAY eligibility verification outcome.
+- **Produced By**: PM-JAY Adapter / Insurance Port
+- **Consumed By**: Intake Service / Kiosk Terminal
+
+```python
+class PMJAYVerificationResult(BaseModel):
+    """Result of PM-JAY golden card verification."""
+    eligible: bool = Field(..., description="Whether beneficiary is PM-JAY eligible.")
+    pmjay_id: str | None = Field(default=None, description="Beneficiary PM-JAY ID.")
+    beneficiary_name: str | None = Field(default=None, description="Masked beneficiary name.")
+    state_code: str | None = Field(default=None, description="State code.")
+    coverage_amount_inr: int = Field(default=0, description="Available coverage amount in INR.")
+    verified_at: datetime = Field(..., description="UTC verification timestamp.")
+    message: str = Field(default="", description="Verification outcome message.")
+```
+
 

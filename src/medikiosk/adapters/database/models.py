@@ -34,6 +34,10 @@ class SessionModel(Base):
     intake_progress: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     informant_type: Mapped[str] = mapped_column(String(20), default="patient", nullable=False)
     informant_relationship: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    token_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    chamber_room: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    billing_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    total_fees_inr: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     audit_events: Mapped[list[AuditEventModel]] = relationship(
         "AuditEventModel", back_populates="session", cascade="all, delete-orphan"

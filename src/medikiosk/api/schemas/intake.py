@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class StartSessionRequest(BaseModel):
@@ -111,3 +111,19 @@ class PurgeResponse(BaseModel):
     session_id: UUID
     purged: bool
     message: str
+
+
+class VerifyPMJAYRequest(BaseModel):
+    """Request to verify PM-JAY eligibility."""
+
+    session_id: UUID
+    pmjay_id: str | None = Field(default=None, description="Optional PM-JAY Beneficiary ID")
+    abha_number: str | None = Field(default=None, description="Optional ABHA Number")
+
+    @model_validator(mode="after")
+    def _require_one_id(self) -> VerifyPMJAYRequest:
+        pmjay = self.pmjay_id.strip() if self.pmjay_id else None
+        abha = self.abha_number.strip() if self.abha_number else None
+        if not pmjay and not abha:
+            raise ValueError("Must provide either pmjay_id or abha_number")
+        return self

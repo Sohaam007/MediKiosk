@@ -39,12 +39,14 @@ from medikiosk.adapters.storage.local import LocalStorageAdapter
 
 # ── Port interfaces ────────────────────────────────────────────────────────────
 from medikiosk.ports.cache import CachePort
+from medikiosk.ports.comms import NotificationPort
 from medikiosk.ports.database import (
     DocumentRepository,
     FHIRRepository,
     SummaryRepository,
 )
 from medikiosk.ports.doctor import DoctorRepository
+from medikiosk.ports.insurance import PMJAYEligibilityPort
 from medikiosk.ports.llm import LLMPort
 from medikiosk.ports.package import PackageCatalogPort
 from medikiosk.ports.storage import StoragePort
@@ -268,6 +270,19 @@ def get_package_catalog_dep() -> PackageCatalogPort:
 
     return InMemoryPackageCatalog()
 
+
+def get_pmjay_adapter_dep() -> PMJAYEligibilityPort:
+    """Provide the PMJAYEligibilityPort."""
+    from medikiosk.adapters.insurance.mock_pmjay import MockPMJAYAdapter
+
+    return MockPMJAYAdapter()
+
+
+def get_notification_adapter_dep() -> NotificationPort:
+    """Provide the NotificationPort."""
+    from medikiosk.adapters.comms.mock_whatsapp import MockWhatsAppNotificationAdapter
+
+    return MockWhatsAppNotificationAdapter()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Service dependencies

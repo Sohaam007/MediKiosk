@@ -10,7 +10,7 @@ SECURITY: Only session_id (UUID string) is ever written to logs. No PHI.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 
@@ -223,6 +223,82 @@ class SessionService:
             new_status=new_status.value,
         )
         return updated
+
+    async def update_billing_status(
+        self,
+        session_id: uuid.UUID,
+        billing_status: str,
+        total_fees_inr: int,
+        *,
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Update billing status and total fees for the session.
+
+        Args:
+            session_id: UUID of the session to update.
+            billing_status: Billing outcome (e.g. 'PMJAY_CASHLESS').
+            total_fees_inr: Final fee amount calculated (must be >= 0).
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState.
+        """
+        if total_fees_inr < 0:
+            raise ValueError(f"total_fees_inr must be non-negative, got {total_fees_inr}")
+
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updates = {
+            "billing_status": billing_status,
+            "total_fees_inr": total_fees_inr,
+        }
+        updated = session.model_copy(update=updates)
+        await self._session_repo.update(updated)
+
+        seq = await self._next_seq(session_id)
+        timestamp = now or datetime.now(UTC)
+        await self._audit_repo.append(
+            AuditEvent(
+                event_id=uuid.uuid4(),
+                session_id=session_id,
+                event_type=AuditEventType.BILLING_STATUS_UPDATED,
+                timestamp=timestamp,
+                sequence_number=seq,
+                payload={"billing_status": billing_status, "total_fees_inr": total_fees_inr},
+            )
+        )
+
+        log.info(
+            "billing_status_updated",
+            session_id=str(session_id),
+            billing_status=billing_status,
+        )
+        return updated
+
+    async def record_patient_paged(
+        self,
+        session_id: uuid.UUID,
+        token_number: str,
+        chamber_room: str,
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        """Record an audit event that the patient was paged."""
+        await self.get_session(session_id)
+        seq = await self._next_seq(session_id)
+        timestamp = now or datetime.now(UTC)
+        await self._audit_repo.append(
+            AuditEvent(
+                event_id=uuid.uuid4(),
+                session_id=session_id,
+                event_type=AuditEventType.PATIENT_PAGED,
+                timestamp=timestamp,
+                sequence_number=seq,
+                payload={"token_number": token_number, "chamber_room": chamber_room},
+            )
+        )
 
     async def list_active_sessions(
         self, tenant_id: str = "default", department_id: str = "general"
