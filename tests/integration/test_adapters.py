@@ -46,7 +46,6 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 NOW = datetime.now(tz=UTC)
 
 
-
 @pytest_asyncio.fixture
 async def db_session_factory():
     """Create an in-memory SQLite engine + tables for each test."""
@@ -282,7 +281,6 @@ async def test_session_repo_persists_billing_and_wayfinding_fields(db_session_fa
         assert re_fetched.billing_status == "PMJAY_CASHLESS"
         assert re_fetched.total_fees_inr == 0
         await db.commit()
-
 
 
 @pytest.mark.asyncio

@@ -76,9 +76,7 @@ async def _fetch_queue_response(
     now = datetime.now(UTC)
     for s in sessions:
         created_at = (
-            s.created_at
-            if s.created_at.tzinfo is not None
-            else s.created_at.replace(tzinfo=UTC)
+            s.created_at if s.created_at.tzinfo is not None else s.created_at.replace(tzinfo=UTC)
         )
         wait_seconds = int((now - created_at).total_seconds())
 
@@ -130,9 +128,7 @@ async def _fetch_queue_response(
 
     # Sort entries by priority (critical > urgent > normal), then wait time descending
     priority_order = {"critical": 0, "urgent": 1, "normal": 2}
-    entries.sort(
-        key=lambda e: (priority_order.get(e.triage_priority, 2), -e.wait_time_seconds)
-    )
+    entries.sort(key=lambda e: (priority_order.get(e.triage_priority, 2), -e.wait_time_seconds))
 
     return QueueResponse(
         department_id=department_id,
@@ -240,7 +236,6 @@ async def page_patient(
     )
 
 
-
 @router.get("/api/clinician/overview", response_model=ClinicianOverviewResponse)
 async def get_overview(
     current_user: _ClinicianDep,
@@ -296,6 +291,7 @@ async def get_session_detail(
         cached_intake = await cache.get(f"intake:{session.session_id}")
         if cached_intake:
             import json
+
             intake_data = json.loads(cached_intake)
             triage_alerts = intake_data.get("triage_alerts", [])
             patient_profile = intake_data.get("patient_profile", {})
@@ -303,9 +299,7 @@ async def get_session_detail(
             timeline_events = intake_data.get("timeline_events", [])
     except Exception as exc:
         log.warning(
-            "clinician_session_detail_cache_lookup_failed",
-            session_id=session_id,
-            error=str(exc)
+            "clinician_session_detail_cache_lookup_failed", session_id=session_id, error=str(exc)
         )
 
     return ClinicianSessionDetailResponse(

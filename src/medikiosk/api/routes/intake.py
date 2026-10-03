@@ -39,6 +39,7 @@ from medikiosk.api.schemas.intake import (
     VerifyPMJAYRequest,
 )
 from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult
+from medikiosk.domain.intake.clinical_questions import generate_next_question
 from medikiosk.ports.insurance import PMJAYEligibilityPort
 from medikiosk.services.intake_service import IntakeService
 from medikiosk.services.session_service import SessionService
@@ -171,12 +172,20 @@ async def respond(
             }
         )
 
+    previous_responses = [r.response_text for r in updated_session.responses]
+    next_question = generate_next_question(
+        response_text=body.response_text,
+        turn_index=len(updated_session.responses),
+        lang=session.patient_language,
+        history=previous_responses,
+    )
+
     return RespondResponse(
         session_id=session.session_id,
         intake_progress=updated_session.progress,
         human_fallback_triggered=updated_session.human_fallback_triggered,
         triage_alerts=triage_alerts_out,
-        next_question="Please describe your chief complaint.",
+        next_question=next_question,
     )
 
 
@@ -287,4 +296,3 @@ async def verify_pmjay(
         )
 
     return result
-

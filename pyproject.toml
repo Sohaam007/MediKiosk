@@ -112,6 +112,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "T20"]
 "scripts/**/*.py" = ["T20"]
+"src/medikiosk/domain/intake/clinical_questions.py" = ["E501"]
+"tests/unit/domain/intake/test_clinical_questions.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

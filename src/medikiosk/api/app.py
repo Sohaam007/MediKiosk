@@ -205,7 +205,6 @@ def create_app() -> FastAPI:
             },
         )
 
-
     # ── Routers ────────────────────────────────────────────────────────────────
     # Lane 3 implements the full route handlers; stub modules exist now.
 

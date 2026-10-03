@@ -2,6 +2,7 @@
 
 Provides token issuance for Kiosk Devices and Clinician Dashboard.
 """
+
 from __future__ import annotations
 
 import base64
@@ -22,18 +23,22 @@ log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["auth"])
 
+
 class TokenRequest(BaseModel):
     client_id: str = Field(description="Client identifier")
     role: str = Field(default="Kiosk_Device", description="Role to assume")
+
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"  # noqa: S105
     expires_in: int
 
+
 def _encode_b64url(data: bytes) -> str:
     """Encode bytes to base64url string."""
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
 
 def _generate_jwt(sub: str, role: str, secret: str, ttl_seconds: int = 3600) -> str:
     """Generate an HS256 JWT."""
@@ -51,13 +56,12 @@ def _generate_jwt(sub: str, role: str, secret: str, ttl_seconds: int = 3600) -> 
 
     signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
     signature = hmac.new(
-        secret.encode("utf-8"),
-        msg=signing_input,
-        digestmod=hashlib.sha256
+        secret.encode("utf-8"), msg=signing_input, digestmod=hashlib.sha256
     ).digest()
 
     signature_b64 = _encode_b64url(signature)
     return f"{header_b64}.{payload_b64}.{signature_b64}"
+
 
 @router.post("/api/auth/token", response_model=TokenResponse)
 async def generate_token(
@@ -68,17 +72,12 @@ async def generate_token(
     if request.role not in ALLOWED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role. Must be one of {list(ALLOWED_ROLES)}"
+            detail=f"Invalid role. Must be one of {list(ALLOWED_ROLES)}",
         )
 
     secret = settings.effective_jwt_secret
     ttl = 3600
-    token = _generate_jwt(
-        sub=request.client_id,
-        role=request.role,
-        secret=secret,
-        ttl_seconds=ttl
-    )
+    token = _generate_jwt(sub=request.client_id, role=request.role, secret=secret, ttl_seconds=ttl)
 
     log.info("token_issued", client_id=request.client_id, role=request.role)
     return TokenResponse(

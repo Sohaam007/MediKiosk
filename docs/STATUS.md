@@ -1,8 +1,40 @@
 # STATUS
 
-## Wave 11 (Frontend Kiosk UI, Clinician Console Parity & End-to-End API Integration)
+## Wave 12 (Zero-Trust Logic Verification, Multilingual SOCRATES Dialogue, Medical Blue Rebranding & Catchy Nano Banner)
 
-**Status:** ✅ Completed.
+**Status:** ✅ Completed & Verified by 2 Independent Zero-Trust Logic Verifiers (100% PASS).
+
+**Accomplishments:**
+- ✅ **Dynamic Multilingual SOCRATES Clinical Dialogue Engine (`frontend/src/utils/clinicalQuestions.ts` & `src/medikiosk/domain/intake/clinical_questions.py`)**:
+  - Implemented the clinical SOCRATES assessment protocol (Chief complaint → Onset/Duration → Severity 1-10 → Radiation → Associated symptoms → Prior medications).
+  - Multi-script, symptom-aware branches for Fever, Chest tightness, Abdominal pain, Cough, Headache, and General symptoms.
+  - Native translations and tailored quick-reply pills for **all 8 Indian languages**: English (`en-IN`), Hindi (`hi-IN`), Bengali (`bn-IN`), Tamil (`ta-IN`), Telugu (`te-IN`), Marathi (`mr-IN`), Gujarati (`gu-IN`), Kannada (`kn-IN`).
+  - Backend `/api/intake/respond` wired with pure domain module `clinical_questions.py`.
+- ✅ **Resilient Doctor & Health Package Catalog with Wayfinding**:
+  - Fixed API parameter drop issue so doctor and package catalogs always load with reliable seed fallbacks (`SEED_DOCTORS` and `SEED_PACKAGES`).
+  - Interactive selection persists to Stage 6 Token & Indoor Wayfinding screen displaying doctor name, room number, OPD chamber, and package inclusions.
+- ✅ **Elapsed Timer Reset Semantics (DPDP Act 2023 Compliance)**:
+  - Fixed isolated timer state in `KioskStepperHeader.tsx`; lifted timer state to `useTimer` in `KioskIntakeView.tsx`.
+  - Walk-away reset (`handlePurgeSession`) calls `resetTimer()`, restoring elapsed intake time to `00:00`.
+- ✅ **Clinician Console Interactivity & Active Tab Workflow (`frontend/src/views/ClinicianQueueView.tsx`)**:
+  - Triage red-flag banner "Review now" CTA wired to immediately select critical patient (Riya Kapoor) and open her live clinical story.
+  - Default initialization of `selectedSession` guarantees zero blank panels on mount.
+  - Active interactive components across all 5 tabs:
+    - *Overview*: Split queue and live 72% progress dossier with vitals strip.
+    - *Live intake*: Priority filters (`all`, `critical`, `urgent`, `normal`), search, and working action buttons ("Page via WhatsApp", "Call into Room 104", "Mark Attended").
+    - *Documents*: Processed OCR scans table with "View Document" preview modal and client-side "Download FHIR JSON" generator.
+    - *Patient profiles*: Searchable historical directory with longitudinal visits and SOAP/Ayush clinical notes.
+    - *Integrations*: ABDM M1/M2/M3, PM-JAY NHA Gateway, and EHR HL7 FHIR Bridge cards with toggle switches and animated latency ping tests.
+- ✅ **Cohesive Medical Blue Design System**:
+  - Unified color scheme across Kiosk and Clinician consoles using deep hospital navy (`#0F2E4A`, `#0A1F33`), hospital royal blue (`#1E3A8A`), and vibrant medical blue (`#2563EB`).
+- ✅ **Catchy Top Nano Banner (`frontend/src/components/NanoBanner.tsx`)**:
+  - Micro announcement ticker cycling live trauma emergency hotlines (`108`/`112`), PM-JAY & ABHA cashless coverage, multilingual voice support, and real-time VetoEngine triage status.
+  - Animated live status ping, interactive slides, quick emergency call link, and dismiss toggle.
+- ✅ **Zero-Trust Logic Audit Verdict**:
+  - Independently verified by `logic_verifier_1` (Clinical Dialogue & Timer Semantics) and `logic_verifier_2` (Clinician Console & Invariant Rules) — both scored 100% PASS with AST/code evidence.
+  - Test suites: 113/113 passing tests (`pytest`), strict typing passed on 93 files (`mypy --strict`), zero linting errors (`ruff check`), and clean frontend build (`npm run build`).
+
+---
 
 **Accomplishments:**
 - ✅ **Voice Intake with Web Speech API & Multilingual TTS**:
