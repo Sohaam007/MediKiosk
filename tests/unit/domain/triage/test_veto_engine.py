@@ -121,3 +121,52 @@ def test_veto_multiple_alerts():
     assert "CARDIAC_RED_FLAG" in rule_names
     assert "HEMODYNAMIC_SHOCK_SYS" in rule_names
     assert "ACOUSTIC_DISTRESS_WPM" in rule_names
+
+
+def test_veto_cardiac_red_flag_pressure_shoulder():
+    alerts = VetoEngine.evaluate(
+        ["severe chest pressure", "radiating to my left shoulder and arm"],
+        uuid.uuid4,
+        datetime.now(UTC),
+    )
+    assert len(alerts) == 1
+    assert alerts[0].rule_name == "CARDIAC_RED_FLAG"
+
+
+def test_veto_cardiac_red_flag_tightness_jaw():
+    alerts = VetoEngine.evaluate(
+        ["I have tightness in chest and radiating to jaw"],
+        uuid.uuid4,
+        datetime.now(UTC),
+    )
+    assert len(alerts) == 1
+    assert alerts[0].rule_name == "CARDIAC_RED_FLAG"
+
+
+def test_veto_cardiac_red_flag_heaviness_back():
+    alerts = VetoEngine.evaluate(
+        ["feeling heaviness in chest", "shooting into my back"],
+        uuid.uuid4,
+        datetime.now(UTC),
+    )
+    assert len(alerts) == 1
+    assert alerts[0].rule_name == "CARDIAC_RED_FLAG"
+
+
+def test_veto_cardiac_red_flag_hinglish_expanded():
+    alerts = VetoEngine.evaluate(
+        ["chaati mein dard ho raha hai", "aur bayein haath mein bhi"],
+        uuid.uuid4,
+        datetime.now(UTC),
+    )
+    assert len(alerts) == 1
+    assert alerts[0].rule_name == "CARDIAC_RED_FLAG"
+
+
+def test_veto_rule_enum():
+    from medikiosk.domain.triage.veto_engine import VetoRule
+
+    assert VetoRule.ACUTE_CORONARY_SYNDROME == "CARDIAC_RED_FLAG"
+    assert VetoRule.CARDIAC_RED_FLAG == "CARDIAC_RED_FLAG"
+    assert VetoRule.STROKE_FAST_PROTOCOL == "STROKE_FAST_PROTOCOL"
+

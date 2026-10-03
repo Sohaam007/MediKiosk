@@ -53,7 +53,10 @@ class GeminiAdapter:
         max_input_tokens: int = 8192,
         max_output_tokens: int = 4096,
     ) -> None:
-        self._client = genai.Client(api_key=api_key)
+        self._api_key = api_key
+        self._client: genai.Client | None = (
+            genai.Client(api_key=api_key) if api_key and api_key.strip() else None
+        )
         self._model_name = model_name
         self._max_input_tokens = max_input_tokens
         self._max_output_tokens = max_output_tokens
@@ -114,6 +117,8 @@ class GeminiAdapter:
         Raises:
             LLMError: On API failure, rate limit, or unexpected error.
         """
+        if self._client is None:
+            raise LLMError("Gemini API key is not configured")
         try:
             config = self._make_config(system, temperature)
             response = await self._client.aio.models.generate_content(
@@ -172,11 +177,17 @@ class GeminiAdapter:
                 log.debug("gemini_structured_ok", schema=name, attempt=attempt)
                 return result
             except (json.JSONDecodeError, ValidationError) as exc:
-                log.warning("gemini_parse_fail", schema=name, attempt=attempt, err=str(exc)[:100])
+                log.warning(
+                    "gemini_parse_fail",
+                    schema=name,
+                    attempt=attempt,
+                    exc_type=type(exc).__name__,
+                )
                 last_exc = exc
             except LLMError:
                 raise
-        raise LLMParseError(f"Failed to parse {name} after 3 attempts: {last_exc}")
+        exc_name = type(last_exc).__name__ if last_exc else "unknown"
+        raise LLMParseError(f"Failed to parse {name} after 3 attempts: {exc_name}")
 
     async def generate_vision(
         self,
@@ -204,6 +215,8 @@ class GeminiAdapter:
             raise LLMError(f"Unsupported image MIME type: {mime_type!r}")
         if len(image_bytes) > 10 * 1024 * 1024:
             raise LLMError("Image exceeds 10 MB size limit")
+        if self._client is None:
+            raise LLMError("Gemini API key is not configured")
         try:
             eff_system = system or "Extract all medical text and data from this image accurately."
             config = self._make_config(eff_system, temperature=0.1)

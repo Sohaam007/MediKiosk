@@ -21,6 +21,7 @@ NEVER log PHI. Only session_id is safe as a patient reference.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import structlog
@@ -32,13 +33,18 @@ _PHI_FIELDS: frozenset[str] = frozenset(
     {
         "patient_name",
         "name",
+        "beneficiary_name",
         "abha_id",
         "aadhaar",
         "aadhaar_number",
         "transcript",
         "response_text",
+        "raw_transcript",
         "extracted_text",
+        "trigger_text",
         "phone_number",
+        "phone",
+        "patient_phone",
         "mobile",
         "dob",
         "date_of_birth",
@@ -51,7 +57,41 @@ _PHI_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+_PATTERNS = [
+    re.compile(r"(?:\+91[\-\s]?)?[6-9]\d{9}\b"),                     # Indian Mobile
+    re.compile(r"\b\d{2}-\d{4}-\d{4}-\d{4}\b"),                     # ABHA ID
+    re.compile(r"\b\d{4}\s?\d{4}\s?\d{4}\b"),                       # Aadhaar
+    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), # Email
+]
+
 _PHI_REDACTED = "[PHI REDACTED]"
+
+
+def _mask_phi_patterns(text: str) -> str:
+    """Mask known PHI regex patterns (phone, ABHA, Aadhaar, email) in strings."""
+    if not isinstance(text, str):
+        return text
+    for pattern in _PATTERNS:
+        text = pattern.sub(_PHI_REDACTED, text)
+    return text
+
+
+def _scrub_value(val: Any) -> Any:
+    """Recursively scrub PHI fields and patterns from arbitrary structures."""
+    if isinstance(val, dict):
+        return {
+            k: _PHI_REDACTED if k.lower() in _PHI_FIELDS else _scrub_value(v)
+            for k, v in val.items()
+        }
+    if isinstance(val, list):
+        return [_scrub_value(item) for item in val]
+    if isinstance(val, tuple):
+        return tuple(_scrub_value(item) for item in val)
+    if isinstance(val, set):
+        return {_scrub_value(item) for item in val}
+    if isinstance(val, str):
+        return _mask_phi_patterns(val)
+    return val
 
 
 def _scrub_phi(
@@ -62,7 +102,8 @@ def _scrub_phi(
     """Structlog processor: redact PHI fields from log event dicts.
 
     Iterates over all keys in the event dict and replaces values of known
-    PHI fields with the redaction marker. Works recursively on nested dicts.
+    PHI fields with the redaction marker. Works recursively on nested dicts,
+    lists, tuples, and masks regex patterns in strings.
 
     Args:
         logger: The wrapped logger (unused — required by structlog protocol).
@@ -75,8 +116,8 @@ def _scrub_phi(
     for key in list(event_dict.keys()):
         if key.lower() in _PHI_FIELDS:
             event_dict[key] = _PHI_REDACTED
-        elif isinstance(event_dict[key], dict):
-            event_dict[key] = _scrub_nested(event_dict[key])
+        else:
+            event_dict[key] = _scrub_value(event_dict[key])
     return event_dict
 
 
@@ -89,15 +130,8 @@ def _scrub_nested(data: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Scrubbed copy of the dict.
     """
-    result: dict[str, Any] = {}
-    for key, value in data.items():
-        if key.lower() in _PHI_FIELDS:
-            result[key] = _PHI_REDACTED
-        elif isinstance(value, dict):
-            result[key] = _scrub_nested(value)
-        else:
-            result[key] = value
-    return result
+    scrubbed = _scrub_value(data)
+    return scrubbed if isinstance(scrubbed, dict) else {}
 
 
 def configure_logging(debug: bool = False) -> None:

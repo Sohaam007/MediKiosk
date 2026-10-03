@@ -18,7 +18,7 @@ import time
 from typing import Annotated
 
 import structlog
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # auth.py is the wiring boundary for JWT secret retrieval — config only.
@@ -73,6 +73,13 @@ def _hs256_decode(token: str, secret: str) -> dict[str, object]:
     Raises:
         HTTPException 401: If signature invalid, token malformed, or expired.
     """
+    if not secret or not secret.strip():
+        log.error("jwt_secret_empty")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication secret is not configured",
+        )
+
     parts = token.split(".")
     if len(parts) != 3:
         raise HTTPException(
@@ -125,20 +132,25 @@ def _hs256_decode(token: str, secret: str) -> dict[str, object]:
             detail="Invalid or expired token",
         ) from None
 
-    # Validate expiry (exp claim)
-    exp = claims.get("exp")
-    if exp is not None:
-        try:
-            if int(str(exp)) < int(time.time()):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired token",
-                )
-        except (TypeError, ValueError):
+    # Mandatory expiry (exp claim) check
+    if "exp" not in claims:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing mandatory exp claim",
+        )
+
+    exp = claims["exp"]
+    try:
+        if int(str(exp)) < int(time.time()):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
-            ) from None
+            )
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        ) from None
 
     return claims
 
@@ -167,7 +179,15 @@ def verify_jwt(
         HTTPException 401: Token missing, malformed, or expired.
         HTTPException 403: Role claim absent or not in required_roles.
     """
-    secret: str = get_settings().api_key.get_secret_value()
+    settings = get_settings()
+    secret: str = settings.effective_jwt_secret
+
+    if not secret or not secret.strip():
+        log.error("jwt_secret_empty")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication secret is not configured",
+        )
 
     if _HAVE_PYJWT:
         try:
@@ -175,6 +195,7 @@ def verify_jwt(
                 token,
                 secret,
                 algorithms=["HS256"],
+                options={"require": ["exp"]},
             )
         except _pyjwt.ExpiredSignatureError:
             log.warning("jwt_expired")
@@ -208,11 +229,18 @@ def verify_jwt(
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
+    token: Annotated[
+        str | None, Query(description="JWT token for SSE/WebSocket clients")
+    ] = None,
 ) -> dict[str, object]:
     """FastAPI dependency: authenticate the request and return JWT claims.
 
+    Supports Authorization Bearer header, with query parameter fallback
+    for browser EventSource (SSE) connections.
+
     Args:
         credentials: Injected by HTTPBearer. None if Authorization header absent.
+        token: Injected by Query. None if token parameter absent.
 
     Returns:
         Decoded JWT claims dict.
@@ -220,12 +248,13 @@ async def get_current_user(
     Raises:
         HTTPException 401: If credentials are missing or token is invalid.
     """
-    if credentials is None:
+    raw_token = credentials.credentials if credentials is not None else token
+    if raw_token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization required",
         )
-    return verify_jwt(credentials.credentials)
+    return verify_jwt(raw_token)
 
 
 async def require_clinician(

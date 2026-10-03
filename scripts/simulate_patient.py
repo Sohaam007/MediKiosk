@@ -131,10 +131,10 @@ def run_simulation():
 
         # Actually IntakeService holds no state. The IntakeSession is passed around.
         # Let's inspect the fake_session_repo... wait, IntakeSession isn't persisted in Wave 5.
-        # But we DID add extraction to IntakeService.process_response, which returns the updated IntakeSession.
-        # We can't access it via HTTP because the respond endpoint doesn't return `extracted_data`.
-        # So we'll call IntakeService directly to simulate the background worker.
-        intake_session = await fake_intake_service.start_intake(uuid.UUID(s2_id))
+        # But we DID add extraction to IntakeService.process_response, which returns the
+        # updated IntakeSession. We can't access it via HTTP because the respond endpoint
+        # doesn't return `extracted_data`. So we call IntakeService directly to simulate.
+        _ = await fake_intake_service.start_intake(uuid.UUID(s2_id))
 
         # We already processed it via HTTP, but we can verify the manual domain call
         # gives the right result to prove it works.
@@ -154,7 +154,8 @@ def run_simulation():
         assert entity["code_system"] == "namaste"
         assert entity["code"] == "N-AG-03"
         print(
-            f"   [AYUSH MAPPER] Extracted Entity: {entity['normalized_name']} (Code: {entity['code']}, System: {entity['code_system']})"
+            f"   [AYUSH MAPPER] Extracted Entity: {entity['normalized_name']} "
+            f"(Code: {entity['code']}, System: {entity['code_system']})"
         )
 
     asyncio.run(verify_extraction())

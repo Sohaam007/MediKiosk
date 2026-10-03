@@ -76,6 +76,16 @@ mypy_path = ["src"]
 target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
+exclude = [
+    ".agents",
+    ".git",
+    ".venv",
+    "backend",
+    "core",
+    "kiosk",
+    "server",
+    "eval",
+]
 
 [tool.ruff.lint]
 select = [
