@@ -1,6 +1,19 @@
 # STATUS
 
+## Wave 10 (FRONTEND PWA BOOTSTRAPPING)
+
+**Status:** ✅ Completed.
+
+**Accomplishments:**
+- ✅ Swarm of sub-agents successfully built the Vite shell.
+- ✅ Generated the OpenAPI SDK.
+- ✅ Integrated the PWA manifest.
+- ✅ Scaffolded `KioskIntakeView` and `ClinicianQueueView`.
+
+---
+
 ## Current Phase: Wave 9 (Edge Containerization & Production Runtime)
+
 
 **Status:** Completed.
 
