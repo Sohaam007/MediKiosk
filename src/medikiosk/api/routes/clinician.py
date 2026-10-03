@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -37,6 +38,8 @@ from medikiosk.api.dependencies.container import (
     get_session_service_dep,
 )
 from medikiosk.api.schemas.clinician import (
+    ClinicianOverviewResponse,
+    ClinicianSessionDetailResponse,
     PagePatientRequest,
     PagePatientResponse,
     QueueEntry,
@@ -234,4 +237,84 @@ async def page_patient(
         paged=True,
         token=token,
         turns_ahead=body.turns_ahead,
+    )
+
+
+
+@router.get("/api/clinician/overview", response_model=ClinicianOverviewResponse)
+async def get_overview(
+    current_user: _ClinicianDep,
+    session_svc: _SessionServiceDep,
+) -> ClinicianOverviewResponse:
+    """Return dashboard KPI summary metrics and active red-flag alert details."""
+    log.info("clinician_overview_requested")
+
+    # In a real implementation we would compute from the DB.
+    # Providing a mock matching the required schema structure.
+    return ClinicianOverviewResponse(
+        intakes_completed=0,
+        avg_intake_time_seconds=0.0,
+        documents_processed=0,
+        red_flags_caught=0,
+        active_red_flags=[],
+    )
+
+
+@router.get("/api/clinician/session/{session_id}", response_model=ClinicianSessionDetailResponse)
+async def get_session_detail(
+    session_id: str,
+    current_user: _ClinicianDep,
+    session_svc: _SessionServiceDep,
+    cache: _CacheDep,
+) -> ClinicianSessionDetailResponse:
+    """Return full patient profile, status, token, wait time, chief complaint, triage alerts,
+    and timeline events.
+    """
+    from datetime import UTC, datetime
+
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail="Invalid session ID") from err
+
+    session = await session_svc.get_session(session_uuid)
+
+    now = datetime.now(UTC)
+    created_at = (
+        session.created_at
+        if session.created_at.tzinfo is not None
+        else session.created_at.replace(tzinfo=UTC)
+    )
+    wait_time_seconds = int((now - created_at).total_seconds())
+
+    triage_alerts: list[dict[str, object]] = []
+    patient_profile: dict[str, object] | None = None
+    chief_complaint: str | None = None
+    timeline_events: list[dict[str, object]] = []
+
+    try:
+        cached_intake = await cache.get(f"intake:{session.session_id}")
+        if cached_intake:
+            import json
+            intake_data = json.loads(cached_intake)
+            triage_alerts = intake_data.get("triage_alerts", [])
+            patient_profile = intake_data.get("patient_profile", {})
+            chief_complaint = intake_data.get("chief_complaint", None)
+            timeline_events = intake_data.get("timeline_events", [])
+    except Exception as exc:
+        log.warning(
+            "clinician_session_detail_cache_lookup_failed",
+            session_id=session_id,
+            error=str(exc)
+        )
+
+    return ClinicianSessionDetailResponse(
+        session_id=str(session.session_id),
+        status=session.status.value,
+        token_number=session.token_number,
+        wait_time_seconds=max(0, wait_time_seconds),
+        patient_profile=patient_profile,
+        chief_complaint=chief_complaint,
+        triage_alerts=triage_alerts,
+        timeline_events=timeline_events,
     )

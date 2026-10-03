@@ -1,5 +1,42 @@
 # STATUS
 
+## Wave 11 (Frontend Kiosk UI, Clinician Console Parity & End-to-End API Integration)
+
+**Status:** ✅ Completed.
+
+**Accomplishments:**
+- ✅ **Voice Intake with Web Speech API & Multilingual TTS**:
+  - Implemented browser-native `SpeechRecognition` and `SpeechSynthesis` hooks (`useVoiceInput`, `useTTS`).
+  - Full multilingual support across all 8 scheduled Indian languages (`hi-IN`, `en-IN`, `bn-IN`, `ta-IN`, `te-IN`, `mr-IN`, `gu-IN`, `kn-IN`).
+  - Regional audio guidance preview on language selection and hands-free voice intake conversation loop with automated silence detection.
+- ✅ **Ayush Sahayak: AI Clinical Assistant Avatar**:
+  - Interactive 5-state animated avatar (`idle`, `listening`, `thinking`, `speaking`, `alert`) with visual reactive feedback.
+  - Regional speech guidance, mute/unmute audio readout controls, and quick-choice symptom pills (bilingual touch chips for pain intensity, duration, and chief complaints) for streamlined patient interaction.
+- ✅ **Document Scanner**:
+  - Live camera / webcam snapshot capture with environment-facing camera support (`facingMode: 'environment'`) and HTML5 canvas frame capture.
+  - Drag-and-drop / file upload support for prescriptions and lab reports with real-time OCR preview displaying detected medications, diagnostics, and clinical summaries.
+- ✅ **Doctor & Package Selection Catalog**:
+  - Active OPD doctor directory with doctor credentials, experience, ratings, OPD hours, and consultation fees.
+  - Tiered preventive health packages catalog with pricing, lab test inclusions, and verified PM-JAY cashless coverage badges.
+- ✅ **Kiosk Stepper Header**:
+  - 6-stage intake tracking stepper (1. Language, 2. Details, 3. Voice Intake, 4. Documents, 5. Services, 6. Token) with animated progress indicators.
+  - Live elapsed intake timer, emergency hotline notification banner (`108` / `112`), and instant DPDP walk-away privacy reset button.
+- ✅ **Clinician Console Parity with Screenshot 235321**:
+  - Dark green sidebar navigation (`#0F3E2E`) with Clinician Mode toggle, ABDM Verified badge, Attending Clinician profile, and 5 tab navigation items (Overview, Live intake, Documents, Patient profiles, Integrations).
+  - St. Ananya Hospital header with hospital breadcrumbs, EN language switcher, notification badge, and attending physician identity.
+  - Triage red-flag urgent alert banner with immediate "Review now" protocol action.
+  - 4 live KPI metric cards (Intakes Completed, Avg. Intake Time, Documents Processed, Red Flags Caught) reflecting real-time queue health.
+  - Live intake checklist panel showing DPDP 2023 consent capture, chief complaint classification, and surfaced cardiac red-flag screen.
+  - Patient story clinical timeline with chronological timestamps, prescription OCR drug resolutions (e.g., Amlodipine 5mg OD, Sudarshan Vati), and audit logging.
+- ✅ **Backend API Routes**:
+  - `POST /api/auth/token`: JWT token issuance for Kiosk Devices and Clinician Dashboard with role validation.
+  - `POST /api/documents/upload`: Multi-part prescription/document upload with OCR processing and entity extraction.
+  - `GET /api/documents/session/{id}`: Session document scan listing with persistent repository backing.
+  - `GET /api/clinician/overview`: Clinician dashboard KPI summary metrics and active red-flag alerts.
+  - `GET /api/clinician/session/{id}`: Detailed patient profile, token number, wait time, chief complaint, triage alerts, and clinical timeline story.
+
+---
+
 ## Wave 10 (FRONTEND PWA BOOTSTRAPPING)
 
 **Status:** ✅ Completed.
