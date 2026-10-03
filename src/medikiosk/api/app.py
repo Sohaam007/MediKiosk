@@ -13,6 +13,9 @@ All error responses follow the canonical format:
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 import structlog
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -81,6 +84,19 @@ def create_app() -> FastAPI:
     """
     settings = get_settings()
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        """Run table DDL on startup (dev/test only).
+
+        In production use Alembic migrations instead. This is a convenience
+        for local development so the DB is always bootstrapped.
+        """
+        cfg = get_settings()
+        engine = get_engine(cfg.database_url)
+        await create_all_tables(engine)
+        log.info("app_startup_complete", debug=cfg.debug)
+        yield
+
     app = FastAPI(
         title="MediKiosk",
         version="0.2.0",
@@ -88,6 +104,7 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
         openapi_url="/openapi.json" if settings.debug else None,
+        lifespan=lifespan,
     )
 
     # ── CORS ──────────────────────────────────────────────────────────────────
@@ -188,19 +205,6 @@ def create_app() -> FastAPI:
             },
         )
 
-    # ── Startup event ──────────────────────────────────────────────────────────
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        """Run table DDL on startup (dev/test only).
-
-        In production use Alembic migrations instead. This is a convenience
-        for local development so the DB is always bootstrapped.
-        """
-        cfg = get_settings()
-        engine = get_engine(cfg.database_url)
-        await create_all_tables(engine)
-        log.info("app_startup_complete", debug=cfg.debug)
 
     # ── Routers ────────────────────────────────────────────────────────────────
     # Lane 3 implements the full route handlers; stub modules exist now.

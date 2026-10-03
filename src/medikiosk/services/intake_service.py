@@ -204,30 +204,38 @@ class IntakeService:
             return updated_session, []
 
         # ── Veto engine (deterministic — no LLM) ────────────────────────────
+        all_text_inputs = [r.response_text for r in intake_session.responses] + [response_text]
         new_alerts = VetoEngine.evaluate(
-            text_inputs=[response_text],
+            text_inputs=all_text_inputs,
             alert_id_generator=uuid.uuid4,
             now=now,
         )
 
+        existing_rule_names = {
+            a.get("rule_name") if isinstance(a, dict) else getattr(a, "rule_name", None)
+            for a in intake_session.triage_alerts
+        }
+
         for alert in new_alerts:
             triage_alerts.append(alert)
-            seq = await self._next_seq(session_id)
-            await self._audit_repo.append(
-                AuditEvent(
-                    event_id=uuid.uuid4(),
-                    session_id=session_id,
-                    event_type=AuditEventType.TRIAGE_ALERT_FIRED,
-                    timestamp=now,
-                    sequence_number=seq,
-                    # Payload: alert_id + priority only — NOT trigger_text (PHI)
-                    payload={
-                        "alert_id": str(alert.alert_id),
-                        "priority": alert.priority.value,
-                        "rule_name": alert.rule_name,
-                    },
+            if alert.rule_name not in existing_rule_names:
+                existing_rule_names.add(alert.rule_name)
+                seq = await self._next_seq(session_id)
+                await self._audit_repo.append(
+                    AuditEvent(
+                        event_id=uuid.uuid4(),
+                        session_id=session_id,
+                        event_type=AuditEventType.TRIAGE_ALERT_FIRED,
+                        timestamp=now,
+                        sequence_number=seq,
+                        # Payload: alert_id + priority only — NOT trigger_text (PHI)
+                        payload={
+                            "alert_id": str(alert.alert_id),
+                            "priority": alert.priority.value,
+                            "rule_name": alert.rule_name,
+                        },
+                    )
                 )
-            )
 
         # ── Record response (hash only — never raw text) ─────────────────────
         response_hash = hashlib.sha256(response_text.encode()).hexdigest()
@@ -273,6 +281,18 @@ class IntakeService:
 
         updates["responses"] = new_responses
         updates["progress"] = new_progress
+
+        # Combine existing persisted triage alerts with new alerts
+        combined_alerts: list[object] = list(intake_session.triage_alerts)
+        existing_rules = {
+            x.get("rule_name") if isinstance(x, dict) else getattr(x, "rule_name", None)
+            for x in combined_alerts
+        }
+        for a in new_alerts:
+            if a.rule_name not in existing_rules:
+                existing_rules.add(a.rule_name)
+                combined_alerts.append(a)
+        updates["triage_alerts"] = tuple(combined_alerts)
 
         updated_session = intake_session.model_copy(update=updates)
 

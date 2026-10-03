@@ -185,12 +185,13 @@ async def purge_session(
     body: PurgeRequest,
     current_user: _KioskOrClinicianDep,
     session_svc: SessionServiceDep,
+    intake_svc: IntakeServiceDep,
 ) -> PurgeResponse:
     """Hard-delete a session record (DPDP Right-to-Erasure).
 
-    Permanently removes all session data from the store and writes a
-    tamper-evident audit event for compliance. This operation is
-    irreversible.
+    Permanently removes all session data from the store, evicts cached
+    intake state, removes temporary OCR scan/audio files, and writes an
+    immutable audit event for compliance. This operation is irreversible.
 
     Accepted roles: ``Kiosk_Device``, ``Triage_Nurse``.
 
@@ -198,6 +199,7 @@ async def purge_session(
         body: Purge request with session_id and reason.
         current_user: Authenticated principal with purge permission (injected).
         session_svc: Session lifecycle service (injected).
+        intake_svc: Intake service managing cached transcripts (injected).
 
     Returns:
         PurgeResponse: Confirmation that the session was purged.
@@ -208,6 +210,28 @@ async def purge_session(
     """
     purged_at = datetime.now(UTC)
 
+    # 1. Close intake cache entry (evict unmasked transcripts from cache)
+    await intake_svc.close_intake(body.session_id)
+
+    # 2. Clean up temporary OCR prescription scan files and audio files
+    try:
+        import shutil
+        from pathlib import Path
+
+        for base_str in ("./storage", "./data/uploads", "storage", "data/uploads"):
+            base = Path(base_str)
+            for folder in ("documents", "audio"):
+                target = base / folder / str(body.session_id)
+                if target.exists() and target.is_dir():
+                    shutil.rmtree(target, ignore_errors=True)
+    except Exception as exc:
+        log.warning(
+            "purge_storage_cleanup_failed",
+            session_id=str(body.session_id),
+            exc_type=type(exc).__name__,
+        )
+
+    # 3. Purge session from database (preserves immutable audit trail)
     await session_svc.purge_session(
         session_id=body.session_id,
         purged_at=purged_at,

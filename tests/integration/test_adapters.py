@@ -46,11 +46,6 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 NOW = datetime.now(tz=UTC)
 
 
-@pytest.fixture(scope="session")
-def event_loop_policy() -> None:
-    """Use the default event loop policy."""
-    return None
-
 
 @pytest_asyncio.fixture
 async def db_session_factory():

@@ -43,7 +43,10 @@ class OpenAIAdapter:
         model_name: str = "gpt-4o-mini",
         max_output_tokens: int = 4096,
     ) -> None:
-        self._client = AsyncOpenAI(api_key=api_key)
+        self._api_key = api_key
+        self._client: AsyncOpenAI | None = (
+            AsyncOpenAI(api_key=api_key) if api_key and api_key.strip() else None
+        )
         self._model = model_name
         self._max_tokens = max_output_tokens
         log.info("openai_adapter_init", model=model_name)
@@ -61,6 +64,8 @@ class OpenAIAdapter:
 
     async def generate(self, prompt: str, system: str, *, temperature: float = 0.3) -> str:
         """Generate a free-text response."""
+        if self._client is None:
+            raise LLMError("OpenAI API key is not configured")
         try:
             resp = await self._client.chat.completions.create(
                 model=self._model,
@@ -119,6 +124,8 @@ class OpenAIAdapter:
             raise LLMError(f"Unsupported MIME type: {mime_type!r}")
         if len(image_bytes) > 10 * 1024 * 1024:
             raise LLMError("Image exceeds 10 MB limit")
+        if self._client is None:
+            raise LLMError("OpenAI API key is not configured")
         try:
             b64 = base64.b64encode(image_bytes).decode()
             eff_sys = system or "Extract all medical information from this image."
