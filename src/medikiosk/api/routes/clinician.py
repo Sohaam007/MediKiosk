@@ -26,14 +26,23 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from medikiosk.api.dependencies.auth import require_clinician
-from medikiosk.api.dependencies.container import get_session_service_dep
-from medikiosk.api.schemas.clinician import QueueEntry, QueueResponse
+from medikiosk.api.dependencies.container import (
+    get_notification_adapter_dep,
+    get_session_service_dep,
+)
+from medikiosk.api.schemas.clinician import (
+    PagePatientRequest,
+    PagePatientResponse,
+    QueueEntry,
+    QueueResponse,
+)
 from medikiosk.domain.errors import MediKioskError
+from medikiosk.ports.comms import NotificationPort
 from medikiosk.services.session_service import SessionService
 
 log = structlog.get_logger(__name__)
@@ -133,4 +142,45 @@ async def queue_live_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # disable nginx buffering for SSE
         },
+    )
+
+
+_NotificationDep = Annotated[NotificationPort, Depends(get_notification_adapter_dep)]
+
+
+@router.post("/api/clinician/queue/page-patient", response_model=PagePatientResponse)
+async def page_patient(
+    body: PagePatientRequest,
+    current_user: _ClinicianDep,
+    session_svc: _SessionServiceDep,
+    notification_adapter: _NotificationDep,
+) -> PagePatientResponse:
+    """Page a patient in the virtual waiting room."""
+    session = await session_svc.get_session(body.session_id)
+
+    token = session.token_number
+    chamber = session.chamber_room
+
+    if not token or not chamber:
+        raise HTTPException(
+            status_code=400, detail="Session does not have a token or chamber assigned."
+        )
+
+    await notification_adapter.send_queue_paging(
+        phone_number=body.phone_number,
+        token_number=token,
+        chamber_room=chamber,
+        turns_ahead=body.turns_ahead,
+    )
+
+    await session_svc.record_patient_paged(
+        session_id=body.session_id,
+        token_number=token,
+        chamber_room=chamber,
+    )
+
+    return PagePatientResponse(
+        paged=True,
+        token=token,
+        turns_ahead=body.turns_ahead,
     )
