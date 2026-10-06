@@ -22,7 +22,7 @@ export function App() {
           <button
             type="button"
             onClick={() => setActiveView('kiosk')}
-            className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all inline-flex items-center justify-center shadow-sm ${
+            className={`min-h-[48px] min-w-[48px] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all inline-flex items-center justify-center shadow-sm ${
               activeView === 'kiosk'
                 ? 'bg-blue-600 text-white shadow-blue-600/30'
                 : 'text-slate-300 hover:text-white hover:bg-white/10'
@@ -33,7 +33,7 @@ export function App() {
           <button
             type="button"
             onClick={() => setActiveView('queue')}
-            className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all inline-flex items-center justify-center shadow-sm ${
+            className={`min-h-[48px] min-w-[48px] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all inline-flex items-center justify-center shadow-sm ${
               activeView === 'queue'
                 ? 'bg-blue-600 text-white shadow-blue-600/30'
                 : 'text-slate-300 hover:text-white hover:bg-white/10'
