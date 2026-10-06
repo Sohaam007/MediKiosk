@@ -256,12 +256,51 @@ export function KioskIntakeView() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const abdmAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackQuestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abdmEventSourceRef = useRef<EventSource | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const handleStartSessionRef = useRef<(overrideConsent?: boolean) => Promise<void>>(() => Promise.resolve());
 
-  // Clean up microphone tracks on unmount
+  // Master unmount cleanup for timers, microphone tracks, and speech synthesis
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
+      if (abdmAdvanceTimerRef.current) {
+        clearTimeout(abdmAdvanceTimerRef.current);
+        abdmAdvanceTimerRef.current = null;
+      }
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+      if (fallbackQuestionTimerRef.current) {
+        clearTimeout(fallbackQuestionTimerRef.current);
+        fallbackQuestionTimerRef.current = null;
+      }
+      if (abdmEventSourceRef.current) {
+        abdmEventSourceRef.current.close();
+        abdmEventSourceRef.current = null;
+      }
       if (audioStreamRef.current) {
         audioStreamRef.current.getTracks().forEach((track) => track.stop());
+        audioStreamRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // ignore
+        }
+      }
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
       }
     };
   }, []);
@@ -322,7 +361,7 @@ export function KioskIntakeView() {
             setSelectedDoctorId(docRes.data.doctors[0].doctor_id);
           }
         }
-      } catch (e) {
+      } catch {
         if (!ignore) {
           setDoctors(SEED_DOCTORS);
         }
@@ -333,7 +372,7 @@ export function KioskIntakeView() {
         if (!ignore && pkgRes.data?.packages && pkgRes.data.packages.length > 0) {
           setPackages(pkgRes.data.packages);
         }
-      } catch (e) {
+      } catch {
         if (!ignore) {
           setPackages(SEED_PACKAGES);
         }
@@ -399,8 +438,17 @@ export function KioskIntakeView() {
 
   // Fetch ABDM QR on entering registration stage or selecting scan_share mode
   useEffect(() => {
+    let ignore = false;
     if (currentStep === 'registration' && registrationMode === 'scan_share' && !abdmToken) {
-      void fetchAbdmQr();
+      const timer = setTimeout(() => {
+        if (!ignore) {
+          void fetchAbdmQr();
+        }
+      }, 0);
+      return () => {
+        ignore = true;
+        clearTimeout(timer);
+      };
     }
   }, [currentStep, registrationMode, abdmToken]);
 
@@ -415,6 +463,7 @@ export function KioskIntakeView() {
 
     try {
       eventSource = new EventSource(sseUrl);
+      abdmEventSourceRef.current = eventSource;
 
       const onProfileShared = (e: MessageEvent) => {
         try {
@@ -436,8 +485,13 @@ export function KioskIntakeView() {
             setAbdmSuccessToast(`✅ ABHA Profile Linked: ${fullName} (ABHA: ${abha})`);
 
             // Automatically advance to symptom triage step in 1.5 seconds
-            setTimeout(() => {
-              void handleStartSession(true);
+            if (abdmAdvanceTimerRef.current) {
+              clearTimeout(abdmAdvanceTimerRef.current);
+            }
+            abdmAdvanceTimerRef.current = setTimeout(() => {
+              if (!isMountedRef.current) return;
+              void handleStartSessionRef.current(true);
+              abdmAdvanceTimerRef.current = null;
             }, 1500);
           }
         } catch {
@@ -447,6 +501,14 @@ export function KioskIntakeView() {
 
       eventSource.addEventListener('abha_profile_shared', onProfileShared);
       eventSource.onmessage = onProfileShared;
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          if (abdmEventSourceRef.current === eventSource) {
+            abdmEventSourceRef.current = null;
+          }
+        }
+      };
     } catch {
       // EventSource fallback
     }
@@ -454,6 +516,13 @@ export function KioskIntakeView() {
     return () => {
       if (eventSource) {
         eventSource.close();
+        if (abdmEventSourceRef.current === eventSource) {
+          abdmEventSourceRef.current = null;
+        }
+      }
+      if (abdmAdvanceTimerRef.current) {
+        clearTimeout(abdmAdvanceTimerRef.current);
+        abdmAdvanceTimerRef.current = null;
       }
     };
   }, [currentStep, registrationMode, abdmToken, sessionId]);
@@ -483,8 +552,13 @@ export function KioskIntakeView() {
       setConsentGiven(true);
       setAbdmProfileReceived(true);
       setAbdmSuccessToast('✅ ABHA Profile Linked: Riya Kapoor (ABHA: 91-8273-1928-3921)');
-      setTimeout(() => {
-        void handleStartSession(true);
+      if (abdmAdvanceTimerRef.current) {
+        clearTimeout(abdmAdvanceTimerRef.current);
+      }
+      abdmAdvanceTimerRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return;
+        void handleStartSessionRef.current(true);
+        abdmAdvanceTimerRef.current = null;
       }, 1500);
     }
   };
@@ -532,8 +606,13 @@ export function KioskIntakeView() {
     }
   };
 
+  useEffect(() => {
+    handleStartSessionRef.current = handleStartSession;
+  });
+
   // Handle patient response submission (manual or voice)
   const handleSendResponse = async (textToSend?: string) => {
+    if (isLoading || isAutoTransitioning) return;
     const text = (textToSend || inputText).trim();
     if (!text) return;
 
@@ -615,9 +694,15 @@ export function KioskIntakeView() {
       ]);
 
       // Automatically advance to Prescription Scanner (Stage 4) after 1.8 seconds
-      setTimeout(() => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return;
         setIsAutoTransitioning(false);
+        stopTTS();
         setCurrentStep('documents');
+        autoAdvanceTimerRef.current = null;
       }, 1800);
       return;
     }
@@ -653,7 +738,11 @@ export function KioskIntakeView() {
       }
     } catch {
       // Dynamic fallback based on patient language and context
-      setTimeout(() => {
+      if (fallbackQuestionTimerRef.current) {
+        clearTimeout(fallbackQuestionTimerRef.current);
+      }
+      fallbackQuestionTimerRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return;
         setIntakeProgress((p) => Math.min(p + 0.2, 0.85));
         const dynamicFollowUp = getFollowUpQuestion(text, nextCount, selectedLanguage);
         setCurrentQuestion(dynamicFollowUp.question);
@@ -670,9 +759,12 @@ export function KioskIntakeView() {
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           },
         ]);
+        fallbackQuestionTimerRef.current = null;
       }, 400);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -694,6 +786,13 @@ export function KioskIntakeView() {
       }
       if (isListening) {
         stopListening();
+      }
+
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setAudioRecordingError(
+          'Microphone input is not supported on this browser or kiosk terminal. Please type or use touch quick-replies.'
+        );
+        return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -761,11 +860,30 @@ export function KioskIntakeView() {
       setIsRecordingAudio(true);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      setAudioRecordingError(
-        errMsg.includes('Permission') || errMsg.includes('NotAllowedError')
-          ? 'Microphone permission denied. Please allow microphone access in your browser settings.'
-          : 'Could not access microphone input on this device.'
-      );
+      const errName = err instanceof Error ? err.name : '';
+      if (
+        errName === 'NotAllowedError' ||
+        errName === 'PermissionDeniedError' ||
+        errMsg.includes('Permission') ||
+        errMsg.includes('NotAllowedError')
+      ) {
+        setAudioRecordingError(
+          'Microphone permission denied. Please allow microphone access in your browser settings or use touch quick replies.'
+        );
+      } else if (
+        errName === 'NotFoundError' ||
+        errName === 'DevicesNotFoundError' ||
+        errMsg.includes('NotFound') ||
+        errMsg.includes('not found')
+      ) {
+        setAudioRecordingError(
+          'No microphone hardware detected on this kiosk terminal. Please use on-screen quick replies or touch keyboard.'
+        );
+      } else {
+        setAudioRecordingError(
+          'Could not access microphone on this device. Please use touch quick-replies or on-screen typing.'
+        );
+      }
       setIsRecordingAudio(false);
     }
   };
@@ -875,19 +993,83 @@ export function KioskIntakeView() {
     };
 
     try {
-      const existing = JSON.parse(localStorage.getItem('medikiosk_live_patient_queue') || '[]');
-      const updated = [newPatientEntry, ...existing.filter((p: any) => p.session_id !== newPatientEntry.session_id)];
-      localStorage.setItem('medikiosk_live_patient_queue', JSON.stringify(updated));
-      window.dispatchEvent(new Event('medikiosk_queue_updated'));
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const raw = localStorage.getItem('medikiosk_live_patient_queue');
+        let existing: any[] = [];
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              existing = parsed.filter((p) => p && typeof p === 'object' && p.session_id);
+            }
+          } catch {
+            existing = [];
+          }
+        }
+        const updated = [newPatientEntry, ...existing.filter((p: any) => p.session_id !== newPatientEntry.session_id)];
+        localStorage.setItem('medikiosk_live_patient_queue', JSON.stringify(updated));
+        window.dispatchEvent(new Event('medikiosk_queue_updated'));
+      }
     } catch {
-      // ignore
+      // ignore storage error
     }
 
     setCurrentStep('completed');
   };
 
+  // Step transition audio & SSE cleanup
+  useEffect(() => {
+    if (currentStep !== 'conversation' && currentStep !== 'language') {
+      stopTTS();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
+      }
+      if (isListening) {
+        stopListening();
+      }
+      if (isRecordingAudio) {
+        handleStopAudioRecording();
+      }
+    }
+    if (currentStep !== 'registration') {
+      if (abdmEventSourceRef.current) {
+        abdmEventSourceRef.current.close();
+        abdmEventSourceRef.current = null;
+      }
+      if (abdmAdvanceTimerRef.current) {
+        clearTimeout(abdmAdvanceTimerRef.current);
+        abdmAdvanceTimerRef.current = null;
+      }
+    }
+  }, [currentStep, isListening, isRecordingAudio, stopListening, stopTTS]);
+
   // Full DPDP Session Purge & Instant Timer Reset
   const handlePurgeSession = async () => {
+    // Clear all pending timeouts immediately
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (abdmAdvanceTimerRef.current) {
+      clearTimeout(abdmAdvanceTimerRef.current);
+      abdmAdvanceTimerRef.current = null;
+    }
+    if (fallbackQuestionTimerRef.current) {
+      clearTimeout(fallbackQuestionTimerRef.current);
+      fallbackQuestionTimerRef.current = null;
+    }
+    setIsAutoTransitioning(false);
+
+    // Close any active ABDM SSE stream
+    if (abdmEventSourceRef.current) {
+      abdmEventSourceRef.current.close();
+      abdmEventSourceRef.current = null;
+    }
+
     if (sessionId) {
       try {
         await purgeSessionApiSessionPurgePost({
@@ -905,8 +1087,19 @@ export function KioskIntakeView() {
     stopListening();
     resetTranscript();
     stopTTS();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore
+      }
+    }
     if (isRecordingAudio) {
       handleStopAudioRecording();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      audioStreamRef.current = null;
     }
     setLastTranscribedSnippet(null);
     setAudioRecordingError(null);
@@ -974,7 +1167,7 @@ export function KioskIntakeView() {
         {currentStep === 'language' && (
           <div className="w-full flex flex-col items-center">
             {/* Emergency Hotline Header */}
-            <div className="w-full bg-rose-600 text-white py-3.5 px-6 rounded-2xl mb-8 flex items-center justify-between shadow-md border border-rose-500">
+            <div className="w-full bg-red-600 text-white py-3.5 px-6 rounded-2xl mb-8 flex items-center justify-between shadow-md border border-red-500">
               <div className="flex items-center gap-3">
                 <PhoneCall className="w-6 h-6 animate-pulse" />
                 <span className="font-extrabold text-base md:text-lg">
@@ -994,56 +1187,56 @@ export function KioskIntakeView() {
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('en')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 English
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('hi')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 हिन्दी
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('bn')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 বাংলা
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('ta')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 தமிழ்
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('te')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 తెలుగు
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('mr')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 मराठी
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('gu')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 ગુજરાતી
               </button>
               <button
                 type="button"
                 onClick={() => handlePreviewGreeting('kn')}
-                className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 rounded-full text-xs font-semibold transition"
+                className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-50 border-2 border-blue-200 hover:bg-blue-100 active:bg-blue-200 text-blue-900 rounded-xl text-xs font-bold transition flex items-center justify-center"
               >
                 ಕನ್ನಡ
               </button>
@@ -1080,7 +1273,7 @@ export function KioskIntakeView() {
               <button
                 type="button"
                 onClick={() => setRegistrationMode('scan_share')}
-                className={`p-4 rounded-2xl border-2 text-left flex items-center gap-3.5 transition-all ${
+                className={`min-h-[48px] min-w-[48px] w-full p-4 rounded-2xl border-2 text-left flex items-center gap-3.5 transition-all ${
                   registrationMode === 'scan_share'
                     ? 'border-blue-600 bg-blue-50/80 shadow-md ring-2 ring-blue-500/20'
                     : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'
@@ -1109,7 +1302,7 @@ export function KioskIntakeView() {
               <button
                 type="button"
                 onClick={() => setRegistrationMode('manual')}
-                className={`p-4 rounded-2xl border-2 text-left flex items-center gap-3.5 transition-all ${
+                className={`min-h-[48px] min-w-[48px] w-full p-4 rounded-2xl border-2 text-left flex items-center gap-3.5 transition-all ${
                   registrationMode === 'manual'
                     ? 'border-blue-600 bg-blue-50/80 shadow-md ring-2 ring-blue-500/20'
                     : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'
@@ -1172,7 +1365,7 @@ export function KioskIntakeView() {
                     <button
                       type="button"
                       onClick={() => void handleStartSession(true)}
-                      className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition"
+                      className="min-h-[48px] min-w-[48px] px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md transition flex items-center justify-center"
                     >
                       Proceed Now →
                     </button>
@@ -1222,7 +1415,7 @@ export function KioskIntakeView() {
                         <button
                           type="button"
                           onClick={() => void handleSimulateAbdmScan()}
-                          className="w-full min-h-[44px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2 transition active:scale-[0.98]"
+                          className="w-full min-h-[48px] min-w-[48px] bg-[#0F2E4A] hover:bg-[#1E3A8A] text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2 transition active:scale-[0.98]"
                         >
                           <Sparkles className="w-4 h-4" />
                           <span>Simulate Mobile App Scan (Riya Kapoor, 38Y)</span>
@@ -1251,7 +1444,7 @@ export function KioskIntakeView() {
                           key={info.id}
                           type="button"
                           onClick={() => setSelectedInformant(info.id)}
-                          className={`min-h-[72px] p-4 rounded-2xl border-2 text-left flex flex-col items-center justify-center gap-1.5 transition-all ${
+                          className={`w-full min-w-[48px] min-h-[72px] p-4 rounded-2xl border-2 text-left flex flex-col items-center justify-center gap-1.5 transition-all ${
                             isSelected
                               ? 'border-[#0F2E4A] bg-blue-50 text-[#0F2E4A] shadow-md ring-2 ring-blue-500/20'
                               : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50'
@@ -1278,8 +1471,8 @@ export function KioskIntakeView() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Full Name / पूरा नाम <span className="text-rose-500">*</span>
+                       <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Full Name / पूरा नाम <span className="text-red-600">*</span>
                       </label>
                       <input
                         type="text"
@@ -1292,7 +1485,7 @@ export function KioskIntakeView() {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Mobile Number / मोबाइल नंबर <span className="text-rose-500">*</span>
+                        Mobile Number / मोबाइल नंबर <span className="text-red-600">*</span>
                       </label>
                       <input
                         type="tel"
@@ -1305,7 +1498,7 @@ export function KioskIntakeView() {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Age / उम्र <span className="text-rose-500">*</span>
+                        Age / उम्र <span className="text-red-600">*</span>
                       </label>
                       <input
                         type="number"
@@ -1320,7 +1513,7 @@ export function KioskIntakeView() {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Gender / लिंग <span className="text-rose-500">*</span>
+                        Gender / लिंग <span className="text-red-600">*</span>
                       </label>
                       <div className="grid grid-cols-3 gap-2">
                         {(['Male', 'Female', 'Other'] as const).map((gen) => (
@@ -1328,7 +1521,7 @@ export function KioskIntakeView() {
                             key={gen}
                             type="button"
                             onClick={() => setPatientGender(gen)}
-                            className={`min-h-[48px] rounded-xl text-xs font-bold transition border-2 ${
+                            className={`min-h-[48px] min-w-[48px] w-full px-3 rounded-xl text-xs font-bold transition border-2 flex items-center justify-center ${
                               patientGender === gen
                                 ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                                 : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
@@ -1361,13 +1554,15 @@ export function KioskIntakeView() {
 
                 {/* DPDP Act 2023 Consent Box */}
                 <div className="bg-blue-50/70 p-5 rounded-2xl border border-blue-200 flex items-start gap-3.5">
-                  <input
-                    type="checkbox"
-                    id="consent"
-                    checked={consentGiven}
-                    onChange={(e) => setConsentGiven(e.target.checked)}
-                    className="mt-1 w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  />
+                  <div className="min-h-[48px] min-w-[48px] flex items-center justify-center shrink-0">
+                    <input
+                      type="checkbox"
+                      id="consent"
+                      checked={consentGiven}
+                      onChange={(e) => setConsentGiven(e.target.checked)}
+                      className="min-h-[48px] min-w-[48px] w-6 h-6 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </div>
                   <label htmlFor="consent" className="text-sm text-slate-700 cursor-pointer leading-relaxed">
                     <span className="font-extrabold text-[#0F2E4A] block mb-1">
                       DPDP Act 2023 Digital Consent & Right to Erasure
@@ -1454,12 +1649,12 @@ export function KioskIntakeView() {
                   <button
                     type="button"
                     onClick={handleReplayQuestion}
-                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-white transition flex items-center gap-1.5 text-xs font-semibold"
+                    className="min-h-[48px] min-w-[48px] px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-white transition flex items-center justify-center gap-1.5 text-xs font-bold"
                     title={isSpeaking ? 'Mute speech' : 'Replay question voice'}
                   >
                     {isSpeaking ? (
                       <>
-                        <VolumeX className="w-4 h-4 text-rose-300" />
+                        <VolumeX className="w-4 h-4 text-red-300" />
                         <span className="hidden sm:inline">Mute</span>
                       </>
                     ) : (
@@ -1487,11 +1682,11 @@ export function KioskIntakeView() {
                     type="button"
                     onClick={handleToggleTapToSpeak}
                     disabled={isTranscribingAudio || isLoading || isAutoTransitioning}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-extrabold text-xs shadow-md transition-all active:scale-95 ${
+                    className={`min-h-[48px] min-w-[48px] flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl font-extrabold text-xs shadow-md transition-all active:scale-95 ${
                       isRecordingAudio
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse ring-4 ring-rose-300'
+                        ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse ring-4 ring-red-300'
                         : isTranscribingAudio
-                        ? 'bg-indigo-600 text-white cursor-wait'
+                        ? 'bg-blue-600 text-white cursor-wait'
                         : 'bg-[#0F2E4A] hover:bg-[#1E3A8A] text-white'
                     }`}
                   >
@@ -1523,8 +1718,8 @@ export function KioskIntakeView() {
                 </div>
 
                 {isRecordingAudio && (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-100 border border-rose-300 rounded-full text-rose-700 font-extrabold text-[10px] animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-red-100 border border-red-300 rounded-full text-red-700 font-extrabold text-[10px] animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
                     <span>RECORDING BLOB ACTIVE</span>
                   </div>
                 )}
@@ -1550,15 +1745,16 @@ export function KioskIntakeView() {
                     <button
                       type="button"
                       onClick={() => handleSendResponse(lastTranscribedSnippet)}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition active:scale-95"
+                      className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-sm transition active:scale-95 flex items-center justify-center"
                     >
                       Send Answer
                     </button>
                     <button
                       type="button"
                       onClick={() => setLastTranscribedSnippet(null)}
-                      className="text-slate-400 hover:text-slate-600 text-base px-1.5 font-bold"
+                      className="min-h-[48px] min-w-[48px] text-slate-400 hover:text-slate-700 text-lg font-bold flex items-center justify-center rounded-xl hover:bg-slate-100 transition"
                       title="Dismiss"
+                      aria-label="Dismiss transcript"
                     >
                       ×
                     </button>
@@ -1567,8 +1763,8 @@ export function KioskIntakeView() {
               )}
 
               {audioRecordingError && (
-                <div className="mx-6 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-rose-800">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <div className="mx-6 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-red-800">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
                   <span>{audioRecordingError}</span>
                 </div>
               )}
@@ -1617,8 +1813,8 @@ export function KioskIntakeView() {
                 )}
 
                 {isListening && (
-                  <div className="flex items-center gap-2 text-rose-600 text-xs font-bold bg-rose-50 px-4 py-2 rounded-full w-max border border-rose-200 shadow-sm">
-                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                  <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 px-4 py-2 rounded-full w-max border border-red-200 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
                     <span>Listening... {interimTranscript && `"${interimTranscript}"`}</span>
                   </div>
                 )}
@@ -1634,7 +1830,7 @@ export function KioskIntakeView() {
                     key={pill}
                     type="button"
                     onClick={() => handleSendResponse(pill)}
-                    className="px-3.5 py-1.5 bg-white border border-blue-200 hover:bg-blue-50 text-[#0F2E4A] font-semibold rounded-full shadow-sm text-xs transition active:scale-95 whitespace-nowrap"
+                    className="min-h-[48px] min-w-[48px] px-4 py-2.5 bg-white border-2 border-blue-200 hover:bg-blue-50 text-[#0F2E4A] font-bold rounded-xl shadow-sm text-xs transition active:scale-95 whitespace-nowrap flex items-center justify-center"
                   >
                     {pill}
                   </button>
@@ -1650,11 +1846,11 @@ export function KioskIntakeView() {
                     disabled={isTranscribingAudio || isLoading || isAutoTransitioning}
                     className={`min-w-[56px] min-h-[56px] rounded-2xl text-white shadow-md flex items-center justify-center transition-all ${
                       isRecordingAudio
-                        ? 'bg-rose-600 animate-pulse ring-4 ring-rose-400/40'
+                        ? 'bg-red-600 animate-pulse ring-4 ring-red-400/40'
                         : isTranscribingAudio
-                        ? 'bg-indigo-600 animate-pulse'
+                        ? 'bg-blue-600 animate-pulse'
                         : isListening
-                        ? 'bg-rose-600 animate-pulse ring-4 ring-rose-400/40'
+                        ? 'bg-red-600 animate-pulse ring-4 ring-red-400/40'
                         : 'bg-[#0F2E4A] hover:bg-[#1E3A8A]'
                     }`}
                     title={isRecordingAudio ? 'Stop recording & transcribe' : 'Tap to speak'}
@@ -1672,11 +1868,11 @@ export function KioskIntakeView() {
 
                   {/* Real-time Dynamic Sound-Wave Visualizer */}
                   {(isListening || isRecordingAudio) && (
-                    <div className="flex items-center gap-1 px-3 py-2 bg-rose-50 border border-rose-200 rounded-xl">
-                      <span className="text-[11px] font-bold text-rose-700 mr-1.5 flex items-center gap-1">
+                    <div className="flex items-center gap-1 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+                      <span className="text-[11px] font-bold text-red-700 mr-1.5 flex items-center gap-1">
                         <span
                           className={`w-2 h-2 rounded-full ${
-                            hasAudioInput || isRecordingAudio ? 'bg-emerald-500 animate-ping' : 'bg-rose-600 animate-pulse'
+                            hasAudioInput || isRecordingAudio ? 'bg-emerald-500 animate-ping' : 'bg-red-600 animate-pulse'
                           }`}
                         />
                         {isRecordingAudio ? 'Recording' : hasAudioInput ? 'Audio Active' : 'Listening'}
@@ -1687,7 +1883,7 @@ export function KioskIntakeView() {
                         return (
                           <div
                             key={idx}
-                            className="w-1 bg-rose-500 rounded-full transition-all duration-75"
+                            className="w-1 bg-red-500 rounded-full transition-all duration-75"
                             style={{ height: `${barHeight}px` }}
                           />
                         );
@@ -1727,9 +1923,9 @@ export function KioskIntakeView() {
             {/* Right Side Progress & Triage Card */}
             <div className="lg:col-span-4 space-y-6">
               {triageAlert && (
-                <div className="p-5 bg-rose-50 border-2 border-rose-500 rounded-3xl text-rose-900 space-y-2 shadow-md">
-                  <div className="flex items-center gap-2 font-black text-lg text-rose-700">
-                    <AlertTriangle className="w-6 h-6 text-rose-600" />
+                <div className="p-5 bg-red-50 border-2 border-red-500 rounded-3xl text-red-900 space-y-2 shadow-md">
+                  <div className="flex items-center gap-2 font-black text-lg text-red-700">
+                    <AlertTriangle className="w-6 h-6 text-red-600" />
                     <span>Emergency Warning</span>
                   </div>
                   <p className="text-xs font-semibold leading-relaxed">{triageAlert}</p>
@@ -1877,7 +2073,7 @@ export function KioskIntakeView() {
                       );
                       if (match) setSelectedDoctorId(match.doctor_id);
                     }}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow transition active:scale-95 shrink-0"
+                    className="min-h-[48px] min-w-[48px] px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-black shadow transition active:scale-95 shrink-0 flex items-center justify-center"
                   >
                     Select Recommended Specialist
                   </button>
@@ -1908,8 +2104,10 @@ export function KioskIntakeView() {
                     return (
                       <div
                         key={doc.doctor_id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedDoctorId(doc.doctor_id)}
-                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        className={`min-h-[48px] min-w-[48px] w-full p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                           isSelected
                             ? 'border-blue-600 bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
                             : 'border-slate-200 hover:border-blue-300 bg-white'
@@ -1987,12 +2185,14 @@ export function KioskIntakeView() {
                     return (
                       <div
                         key={pkg.package_id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
                           setSelectedPackageIds((prev) =>
                             prev.includes(pkg.package_id) ? [] : [pkg.package_id]
                           );
                         }}
-                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        className={`min-h-[48px] min-w-[48px] w-full p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                           isSelected
                             ? 'border-blue-600 bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
                             : 'border-slate-200 hover:border-blue-300 bg-white'

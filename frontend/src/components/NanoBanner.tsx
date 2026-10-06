@@ -16,10 +16,10 @@ const TICKER_ITEMS: TickerItem[] = [
   {
     id: 'emergency',
     badge: 'CASUALTY 24/7',
-    badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    badgeColor: 'bg-red-500/20 text-red-300 border-red-500/30',
     title: 'Emergency Medical Hotline: Dial 108 or 112',
     subtitle: 'Hospital Casualty Direct: +91 11-2987-1000 · Trauma Unit Active',
-    icon: <PhoneCall className="w-3.5 h-3.5 text-rose-400 animate-pulse" />,
+    icon: <PhoneCall className="w-3.5 h-3.5 text-red-400 animate-pulse" />,
     actionText: 'Call 108',
     actionHref: 'tel:108',
   },
@@ -108,27 +108,31 @@ export function NanoBanner() {
         </div>
 
         {/* Right Side: Quick Action + Navigation Dots + Dismiss */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {current.actionHref ? (
             <a
               href={current.actionHref}
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] transition shadow-sm"
+              className="hidden sm:inline-flex items-center gap-1.5 px-4 min-h-[48px] rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-xs transition shadow-sm"
             >
               {current.actionText}
-              <ChevronRight className="w-3 h-3" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </a>
           ) : (
-            <div className="hidden sm:flex items-center gap-1">
+            <div className="hidden sm:flex items-center">
               {TICKER_ITEMS.map((_, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setCurrentIndex(i)}
                   aria-label={`Go to slide ${i + 1}`}
-                  className={`w-1.5 h-1.5 rounded-full transition-all ${
-                    i === currentIndex ? 'bg-sky-400 w-3' : 'bg-slate-600 hover:bg-slate-400'
-                  }`}
-                />
+                  className="min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
+                >
+                  <span
+                    className={`block h-2 rounded-full transition-all ${
+                      i === currentIndex ? 'bg-sky-400 w-5' : 'bg-slate-500 w-2 hover:bg-slate-300'
+                    }`}
+                  />
+                </button>
               ))}
             </div>
           )}
@@ -138,9 +142,10 @@ export function NanoBanner() {
             type="button"
             onClick={() => setCurrentIndex((prev) => (prev + 1) % TICKER_ITEMS.length)}
             title="Next Announcement"
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition"
+            aria-label="Next Announcement"
+            className="min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition"
           >
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
 
           {/* Dismiss button */}
@@ -148,9 +153,10 @@ export function NanoBanner() {
             type="button"
             onClick={() => setIsVisible(false)}
             title="Dismiss Announcement"
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition ml-0.5"
+            aria-label="Dismiss Announcement"
+            className="min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
