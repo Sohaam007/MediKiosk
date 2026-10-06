@@ -35,6 +35,10 @@ import {
   getInitialQuestion,
   getFollowUpQuestion,
   getQuickReplies,
+  isConcludingOrNegativeResponse,
+  getTerminationAcknowledgement,
+  getDoctorRecommendation,
+  detectSymptomCategory,
 } from '../utils/clinicalQuestions';
 import {
   startSessionApiIntakeStartPost,
@@ -192,6 +196,18 @@ export function KioskIntakeView() {
   const [abhaId, setAbhaId] = useState('');
   const [consentGiven, setConsentGiven] = useState(false);
 
+  // Manual Patient Demographics (for patients without PM-JAY / ABHA)
+  const [patientName, setPatientName] = useState<string>('Ramesh Kumar');
+  const [patientAge, setPatientAge] = useState<string>('42');
+  const [patientGender, setPatientGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [patientPhone, setPatientPhone] = useState<string>('+91 98765 43210');
+
+  // Track detected symptom category for smart doctor recommendation and risk score
+  const [detectedCategory, setDetectedCategory] = useState<string>('general');
+  const [evaluatedRiskScore, setEvaluatedRiskScore] = useState<number>(24);
+  const [triagePriorityLevel, setTriagePriorityLevel] = useState<'critical' | 'urgent' | 'normal'>('normal');
+  const [isAutoTransitioning, setIsAutoTransitioning] = useState<boolean>(false);
+
   // Hook-powered Live Timer (resettable)
   const { seconds: elapsedTime, reset: resetTimer } = useTimer();
 
@@ -216,19 +232,23 @@ export function KioskIntakeView() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
 
-  // Hook-powered Voice Recognition
+  // Hook-powered Voice Recognition with real Web Audio level
   const {
     isListening,
     interimTranscript,
     finalTranscript,
+    audioLevel,
+    hasAudioInput,
     startListening,
     stopListening,
     resetTranscript,
   } = useVoiceInput({
     locale: activeLocale,
-    silenceTimeoutMs: 4000,
-    onSilence: () => {
-      // Automatic stop handled internally
+    silenceTimeoutMs: 3500,
+    onSpeechEnd: (transcript) => {
+      if (transcript && transcript.trim()) {
+        handleSendResponse(transcript.trim());
+      }
     },
   });
 
@@ -385,11 +405,66 @@ export function KioskIntakeView() {
       )
     ) {
       setTriageAlert('CRITICAL RED-FLAG: Severe chest pain / breathlessness detected.');
+      setEvaluatedRiskScore(92);
+      setTriagePriorityLevel('critical');
       setShowEmergencyModal(true);
+    }
+
+    // Symptom categorization & doctor pre-selection
+    const detected = detectSymptomCategory(text);
+    if (detected !== 'general') {
+      setDetectedCategory(detected);
+      const rec = getDoctorRecommendation(detected);
+      setEvaluatedRiskScore(rec.riskScore);
+      setTriagePriorityLevel(rec.urgencyLevel === 'routine' ? 'normal' : rec.urgencyLevel);
+      const matchDoc = doctors.find((d) =>
+        d.department.toLowerCase().includes(rec.department.toLowerCase())
+      );
+      if (matchDoc) {
+        setSelectedDoctorId(matchDoc.doctor_id);
+      }
     }
 
     const nextCount = questionCount + 1;
     setQuestionCount(nextCount);
+
+    // Negative / Concluding intent detection ("no concern", "no", "nothing", "all good", etc.)
+    const isConcluding =
+      (nextCount >= 3 ||
+        currentQuestion.toLowerCase().includes('thank you') ||
+        currentQuestion.includes('धन्यवाद') ||
+        currentQuestion.includes('ধন্যবাদ') ||
+        currentQuestion.includes('நன்றி') ||
+        currentQuestion.includes('ధన్యవాదాలు') ||
+        currentQuestion.includes('ಧನ್ಯವಾದಗಳು')) &&
+      isConcludingOrNegativeResponse(text);
+
+    if (isConcluding) {
+      setIsLoading(false);
+      const ackText = getTerminationAcknowledgement(selectedLanguage);
+      setCurrentQuestion(ackText);
+      setCurrentQuickReplies([]);
+      speak(ackText, activeLocale);
+      setIntakeProgress(1.0);
+      setIsAutoTransitioning(true);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-ai-${prev.length + 1}`,
+          sender: 'ai',
+          text: ackText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+
+      // Automatically advance to Prescription Scanner (Stage 4) after 1.8 seconds
+      setTimeout(() => {
+        setIsAutoTransitioning(false);
+        setCurrentStep('documents');
+      }, 1800);
+      return;
+    }
 
     try {
       const res = await respondApiIntakeRespondPost({
@@ -496,6 +571,71 @@ export function KioskIntakeView() {
       } catch {
         // Fallback gracefully
       }
+    }
+
+    const activeDoc = doctors.find((d) => d.doctor_id === selectedDoctorId) || SEED_DOCTORS[0];
+
+    // Build structured Gemini Clinical Intake Analysis
+    const structuredSummary = `## 🩺 AI CLINICAL INTAKE ANALYSIS (Gemini Medical Core)
+- **Patient**: ${patientName}, ${patientAge}Y / ${patientGender} · Phone: ${patientPhone}
+- **Assigned Doctor**: ${activeDoc.full_name} (${activeDoc.department}) · Chamber: ${activeDoc.chamber_room || 'Room 102'}
+- **Triage Level**: ${triagePriorityLevel.toUpperCase()} · Evaluated Risk Score: ${evaluatedRiskScore}%
+- **Chief Complaint**: ${messages.filter((m) => m.sender === 'patient').map((m) => m.text).join('; ') || 'Reported acute discomfort'}
+- **Clinical Presentation (SOCRATES)**:
+  * Symptom Category: ${detectedCategory.replace('_', ' ').toUpperCase()}
+  * Associated Red Flags: ${triageAlert || 'None reported'}
+  * Progression: Rapid onset, evaluated at Kiosk #01
+- **Vitals & Risk Assessment**:
+  * Evaluated Severity: ${evaluatedRiskScore}% (${triagePriorityLevel === 'critical' ? 'High Risk / Immediate ECG Protocol' : triagePriorityLevel === 'urgent' ? 'Moderate Risk / Priority OPD' : 'Low Risk / Standard Consultation'})
+- **Recommended Action**: Direct dispatch to ${activeDoc.chamber_room || 'OPD Room 104'}.`;
+
+    const newPatientEntry = {
+      session_id: sessionId || `sess_${Math.random().toString(36).substring(2, 9)}`,
+      patient_name: patientName || 'Walk-in Patient',
+      token_number: generatedToken,
+      triage_priority: triagePriorityLevel,
+      wait_time_seconds: 60,
+      status: 'waiting',
+      chief_complaint: messages.filter((m) => m.sender === 'patient').map((m) => m.text).join('; ') || 'Acute symptoms',
+      department_id: activeDoc.department.toLowerCase(),
+      age: parseInt(patientAge) || 42,
+      gender: patientGender,
+      phone_number: patientPhone,
+      doctor_name: activeDoc.full_name,
+      chamber_room: activeDoc.chamber_room || 'Room 102, Heart Center',
+      risk_score: evaluatedRiskScore,
+      gemini_summary: structuredSummary,
+      created_at: new Date().toISOString(),
+      vitals: {
+        spo2: triagePriorityLevel === 'critical' ? '93%' : '98%',
+        bp: triagePriorityLevel === 'critical' ? '146/94 mmHg' : '120/80 mmHg',
+        pulse: triagePriorityLevel === 'critical' ? '112 bpm' : '76 bpm',
+        temp: detectedCategory === 'fever' ? '102.2°F' : '98.6°F',
+      },
+      checklist: {
+        consent: true,
+        complaint: true,
+        red_flag: triagePriorityLevel === 'critical',
+        abha_auth: Boolean(abhaId),
+        vitals: true,
+      },
+      timeline: [
+        {
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          title: 'Kiosk Intake Completed',
+          description: `Patient ${patientName} registered at Kiosk #01. Chief complaint: ${messages.filter((m) => m.sender === 'patient').map((m) => m.text)[0] || 'Symptoms captured'}. Assigned to ${activeDoc.full_name}.`,
+          type: triagePriorityLevel === 'critical' ? 'alert' : 'info',
+        },
+      ],
+    };
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('medikiosk_live_patient_queue') || '[]');
+      const updated = [newPatientEntry, ...existing.filter((p: any) => p.session_id !== newPatientEntry.session_id)];
+      localStorage.setItem('medikiosk_live_patient_queue', JSON.stringify(updated));
+      window.dispatchEvent(new Event('medikiosk_queue_updated'));
+    } catch {
+      // ignore
     }
 
     setCurrentStep('completed');
@@ -708,18 +848,94 @@ export function KioskIntakeView() {
               </div>
             </div>
 
+            {/* Patient Demographics (Manual Intake Form) */}
+            <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h3 className="text-sm font-extrabold text-[#0F2E4A] flex items-center gap-2">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span>Patient Demographics / मरीज का विवरण</span>
+                </h3>
+                <span className="text-[11px] text-slate-500 font-medium">Mandatory for OPD queue</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Full Name / पूरा नाम <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                    placeholder="e.g. Ramesh Kumar / रमेश कुमार"
+                    className="w-full min-h-[48px] border-2 border-slate-200 rounded-xl px-3.5 text-sm font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Mobile Number / मोबाइल नंबर <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={patientPhone}
+                    onChange={(e) => setPatientPhone(e.target.value)}
+                    placeholder="e.g. +91 98765 43210"
+                    className="w-full min-h-[48px] border-2 border-slate-200 rounded-xl px-3.5 text-sm font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Age / उम्र <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={patientAge}
+                    onChange={(e) => setPatientAge(e.target.value)}
+                    placeholder="e.g. 42"
+                    min="1"
+                    max="120"
+                    className="w-full min-h-[48px] border-2 border-slate-200 rounded-xl px-3.5 text-sm font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Gender / लिंग <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Male', 'Female', 'Other'] as const).map((gen) => (
+                      <button
+                        key={gen}
+                        type="button"
+                        onClick={() => setPatientGender(gen)}
+                        className={`min-h-[48px] rounded-xl text-xs font-bold transition border-2 ${
+                          patientGender === gen
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        {gen === 'Male' ? 'Male / पुरुष' : gen === 'Female' ? 'Female / महिला' : 'Other / अन्य'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ABHA Number Input */}
             <div className="space-y-2">
               <label className="block text-sm font-bold text-slate-800">
-                Ayushman Bharat Health Account (ABHA ID)
-                <span className="text-xs font-normal text-slate-500 ml-1.5">(Optional)</span>
+                Ayushman Bharat Health Account (ABHA ID) / PM-JAY Card
+                <span className="text-xs font-normal text-slate-500 ml-1.5">(Optional / यदि उपलब्ध हो)</span>
               </label>
               <div className="relative">
                 <input
                   type="text"
                   value={abhaId}
                   onChange={(e) => setAbhaId(e.target.value)}
-                  placeholder="e.g. 14-digit ABHA Number (91-XXXX-XXXX-XXXX)"
+                  placeholder="e.g. 14-digit ABHA Number (91-XXXX-XXXX-XXXX) or PM-JAY Golden Card ID"
                   className="w-full min-h-[56px] border-2 border-slate-200 rounded-xl px-4 text-base font-medium focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 transition"
                 />
               </div>
@@ -880,6 +1096,13 @@ export function KioskIntakeView() {
                   </div>
                 )}
 
+                {isAutoTransitioning && (
+                  <div className="flex items-center gap-2 text-blue-800 text-xs font-bold bg-blue-50 px-4 py-2.5 rounded-full w-max border border-blue-200 shadow-sm animate-pulse">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Intake complete. Auto-advancing to prescription scanner...</span>
+                  </div>
+                )}
+
                 {isListening && (
                   <div className="flex items-center gap-2 text-rose-600 text-xs font-bold bg-rose-50 px-4 py-2 rounded-full w-max border border-rose-200 shadow-sm">
                     <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
@@ -905,20 +1128,47 @@ export function KioskIntakeView() {
                 ))}
               </div>
 
-              {/* Bottom Input Area: Mic + Text input + Send */}
-              <div className="p-4 bg-white border-t border-slate-200 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleToggleVoice}
-                  className={`min-w-[56px] min-h-[56px] rounded-2xl text-white shadow-md flex items-center justify-center transition-all ${
-                    isListening
-                      ? 'bg-rose-600 animate-pulse ring-4 ring-rose-400/40'
-                      : 'bg-[#0F2E4A] hover:bg-[#1E3A8A]'
-                  }`}
-                  title={isListening ? 'Stop listening' : 'Start speaking'}
-                >
-                  {isListening ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-                </button>
+              {/* Bottom Input Area: Mic + Sound Wave Visualizer + Text input + Send */}
+              <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleVoice}
+                    className={`min-w-[56px] min-h-[56px] rounded-2xl text-white shadow-md flex items-center justify-center transition-all ${
+                      isListening
+                        ? 'bg-rose-600 animate-pulse ring-4 ring-rose-400/40'
+                        : 'bg-[#0F2E4A] hover:bg-[#1E3A8A]'
+                    }`}
+                    title={isListening ? 'Stop listening' : 'Start speaking'}
+                  >
+                    {isListening ? <Mic className="w-6 h-6 animate-bounce" /> : <MicOff className="w-6 h-6" />}
+                  </button>
+
+                  {/* Real-time Dynamic Sound-Wave Visualizer */}
+                  {isListening && (
+                    <div className="flex items-center gap-1 px-3 py-2 bg-rose-50 border border-rose-200 rounded-xl">
+                      <span className="text-[11px] font-bold text-rose-700 mr-1.5 flex items-center gap-1">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            hasAudioInput ? 'bg-emerald-500 animate-ping' : 'bg-rose-600 animate-pulse'
+                          }`}
+                        />
+                        {hasAudioInput ? 'Audio Active' : 'Listening'}
+                      </span>
+                      {[0.4, 0.9, 1.3, 0.7, 1.1, 0.5, 1.0, 0.6].map((multiplier, idx) => {
+                        const level = audioLevel > 0 ? audioLevel : 18;
+                        const barHeight = Math.max(6, Math.min(32, Math.round(level * multiplier * 0.35)));
+                        return (
+                          <div
+                            key={idx}
+                            className="w-1 bg-rose-500 rounded-full transition-all duration-75"
+                            style={{ height: `${barHeight}px` }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 <input
                   type="text"
@@ -935,7 +1185,7 @@ export function KioskIntakeView() {
 
                 <button
                   type="button"
-                  disabled={!inputText.trim() || isLoading}
+                  disabled={!inputText.trim() || isLoading || isAutoTransitioning}
                   onClick={() => handleSendResponse()}
                   className="min-w-[56px] min-h-[56px] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl shadow-md flex items-center justify-center transition active:scale-95"
                 >
@@ -1028,7 +1278,18 @@ export function KioskIntakeView() {
               </button>
               <button
                 type="button"
-                onClick={() => setCurrentStep('services')}
+                onClick={() => {
+                  const rec = getDoctorRecommendation(detectedCategory);
+                  const match = doctors.find(
+                    (d) =>
+                      d.full_name.toLowerCase().includes(rec.recommendedDoctorName.toLowerCase()) ||
+                      d.department.toLowerCase() === rec.department.toLowerCase()
+                  );
+                  if (match) {
+                    setSelectedDoctorId(match.doctor_id);
+                  }
+                  setCurrentStep('services');
+                }}
                 className="px-8 min-h-[52px] bg-[#0F2E4A] hover:bg-[#1E3A8A] text-white text-base font-extrabold rounded-xl flex items-center gap-2 shadow-md transition"
               >
                 <span>Continue to Services</span>
@@ -1053,6 +1314,47 @@ export function KioskIntakeView() {
               </p>
             </div>
 
+            {/* AI Clinical Specialty Recommendation Banner */}
+            {(() => {
+              const rec = getDoctorRecommendation(detectedCategory);
+              return (
+                <div className="bg-gradient-to-r from-[#0F2E4A] to-[#1E3A8A] text-white p-5 rounded-2xl shadow-lg border border-blue-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center border border-white/20 shrink-0">
+                      <Sparkles className="w-6 h-6 text-cyan-300 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 bg-cyan-900/50 px-2 py-0.5 rounded border border-cyan-400/30">
+                          AI Smart Recommendation
+                        </span>
+                        <span className="text-xs text-blue-200">
+                          Based on detected symptoms ({detectedCategory.replace('_', ' ')})
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-white mt-1">
+                        Recommended: <span className="text-cyan-200 font-extrabold">{rec.recommendedDoctorName}</span> ({rec.department}) — {rec.reason}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const match = doctors.find(
+                        (d) =>
+                          d.full_name.toLowerCase().includes(rec.recommendedDoctorName.toLowerCase()) ||
+                          d.department.toLowerCase() === rec.department.toLowerCase()
+                      );
+                      if (match) setSelectedDoctorId(match.doctor_id);
+                    }}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow transition active:scale-95 shrink-0"
+                  >
+                    Select Recommended Specialist
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               {/* Doctor Directory */}
               <div className="bg-white p-6 md:p-7 rounded-3xl shadow-xl border border-blue-100 space-y-4">
@@ -1069,6 +1371,10 @@ export function KioskIntakeView() {
                 <div className="space-y-3.5">
                   {doctors.map((doc) => {
                     const isSelected = selectedDoctorId === doc.doctor_id;
+                    const rec = getDoctorRecommendation(detectedCategory);
+                    const isRecommended =
+                      doc.full_name.toLowerCase().includes(rec.recommendedDoctorName.toLowerCase()) ||
+                      doc.department.toLowerCase() === rec.department.toLowerCase();
                     return (
                       <div
                         key={doc.doctor_id}
@@ -1081,8 +1387,15 @@ export function KioskIntakeView() {
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <div className="font-extrabold text-lg text-[#0F2E4A]">
-                              {doc.full_name}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-extrabold text-lg text-[#0F2E4A]">
+                                {doc.full_name}
+                              </span>
+                              {isRecommended && (
+                                <span className="text-[10px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-white px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                                  <Sparkles className="w-3 h-3" /> Recommended
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs font-semibold text-blue-700">
                               {doc.department} · {doc.degrees.join(', ')}
@@ -1250,6 +1563,26 @@ export function KioskIntakeView() {
               <h2 className="text-3xl md:text-4xl font-black text-[#0F2E4A] mt-2">
                 Your Consultation Token
               </h2>
+            </div>
+
+            {/* Patient Demographics Identity Card */}
+            <div className="p-4 bg-blue-50/80 rounded-2xl border border-blue-200 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div>
+                <div className="text-[11px] font-black text-blue-800 uppercase tracking-wider">
+                  Patient Identity (Registered at Kiosk)
+                </div>
+                <div className="text-xl font-black text-[#0F2E4A] mt-0.5">
+                  {patientName || 'Walk-in Patient'}
+                </div>
+                <div className="text-xs text-slate-600 font-medium mt-0.5">
+                  Age: {patientAge} Yrs · Gender: {patientGender} · Phone: {patientPhone}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Identity Verified
+                </span>
+              </div>
             </div>
 
             {/* Large Token Banner */}

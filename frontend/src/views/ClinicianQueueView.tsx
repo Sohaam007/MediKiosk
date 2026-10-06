@@ -47,6 +47,8 @@ export interface EnrichedQueueItem extends QueueEntry {
   pmjay_eligible?: boolean;
   chamber_room?: string;
   attended_at?: string;
+  risk_score?: number;
+  gemini_summary?: string;
   vitals?: {
     spo2: string;
     bp: string;
@@ -175,6 +177,18 @@ const INITIAL_QUEUE_DATA: EnrichedQueueItem[] = [
     language: 'English & Hindi',
     phone_number: '+91 98765 43210',
     pmjay_eligible: true,
+    risk_score: 92,
+    gemini_summary: `## 🩺 AI CLINICAL INTAKE ANALYSIS (Gemini Medical Core)
+- **Patient**: Riya Kapoor, 38Y / Female · Token #A-204 · ABHA Verified
+- **Triage Level**: CRITICAL (Evaluated Risk Score: 92%)
+- **Chief Complaint**: Acute chest tightness with breathlessness and fever (onset 2 hrs ago)
+- **Clinical Presentation (SOCRATES)**:
+  * Site: Retrosternal chest radiating to left upper shoulder
+  * Severity: Acute (8/10 pain scale)
+  * Associated Symptoms: Breathlessness, diaphoresis, borderline tachycardia (108 bpm)
+  * Medications Detected: Tab. Amlodipine 5mg OD, Sudarshan Vati 2 tabs BD
+- **Vitals Assessment**: SpO2 94% (borderline low), BP 142/92 mmHg, Pulse 108 bpm
+- **Urgent Action Plan**: Stat 12-lead ECG protocol, immediate Senior Cardiologist review in Room 104.`,
     vitals: {
       spo2: '94%',
       bp: '142/92 mmHg',
@@ -243,6 +257,18 @@ const INITIAL_QUEUE_DATA: EnrichedQueueItem[] = [
     language: 'Gujarati & Hindi',
     phone_number: '+91 98220 11234',
     pmjay_eligible: true,
+    risk_score: 74,
+    gemini_summary: `## 🩺 AI CLINICAL INTAKE ANALYSIS (Gemini Medical Core)
+- **Patient**: Aarav Mehta, 45Y / Male · Token #B-112 · PM-JAY Eligible
+- **Triage Level**: URGENT (Evaluated Risk Score: 74%)
+- **Chief Complaint**: Acute right lower quadrant abdominal pain with persistent nausea
+- **Clinical Presentation (SOCRATES)**:
+  * Site: Right Iliac Fossa (RIF) with McBurney's point tenderness
+  * Severity: 7/10 constant dull ache worsening on walking
+  * Associated Symptoms: Nausea, low-grade pyrexia (99.8°F)
+  * Document Scan: Ultrasound report indicates 7.8mm inflamed appendiceal lumen
+- **Vitals Assessment**: SpO2 98%, BP 130/84 mmHg, Pulse 92 bpm
+- **Urgent Action Plan**: Fast-track surgical consult with Shalya Tantra team in Room 106.`,
     vitals: {
       spo2: '98%',
       bp: '130/84 mmHg',
@@ -838,6 +864,49 @@ export function ClinicianQueueView() {
     void fetchData();
     return () => {
       ignore = true;
+    };
+  }, []);
+
+  // Synchronize newly intaken kiosk patients from localStorage and cross-component custom events
+  useEffect(() => {
+    const syncLocalQueue = () => {
+      try {
+        const stored = localStorage.getItem('medikiosk_live_patient_queue');
+        if (stored) {
+          const localPatients: EnrichedQueueItem[] = JSON.parse(stored);
+          if (Array.isArray(localPatients) && localPatients.length > 0) {
+            setQueueData((prev) => {
+              const localIds = new Set(localPatients.map((p) => p.session_id));
+              const remainingPrev = prev.filter((p) => !localIds.has(p.session_id));
+              return [...localPatients, ...remainingPrev];
+            });
+
+            // Automatically select latest kiosk intaken patient
+            setSelectedSession((prev) => {
+              if (!prev || localPatients[0].triage_priority === 'critical') {
+                return localPatients[0];
+              }
+              const match = localPatients.find((p) => p.session_id === prev.session_id);
+              return match || prev;
+            });
+
+            setMetrics((prev) => ({
+              ...prev,
+              intakes_completed: Math.max(prev.intakes_completed, 32 + localPatients.length),
+            }));
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    };
+
+    syncLocalQueue();
+    window.addEventListener('storage', syncLocalQueue);
+    window.addEventListener('medikiosk_queue_updated', syncLocalQueue);
+    return () => {
+      window.removeEventListener('storage', syncLocalQueue);
+      window.removeEventListener('medikiosk_queue_updated', syncLocalQueue);
     };
   }, []);
 
@@ -1570,6 +1639,117 @@ export function ClinicianQueueView() {
 
                     {/* Scrollable details */}
                     <div className="p-5 overflow-y-auto flex-1 space-y-6">
+                      {/* Evaluated Clinical Risk Score Meter */}
+                      {(() => {
+                        const calculatedScore =
+                          selectedSession.risk_score !== undefined
+                            ? selectedSession.risk_score
+                            : selectedSession.triage_priority === 'critical'
+                            ? 92
+                            : selectedSession.triage_priority === 'urgent'
+                            ? 68
+                            : 24;
+                        const isCritical = calculatedScore >= 80;
+                        const isUrgent = calculatedScore >= 50 && calculatedScore < 80;
+
+                        return (
+                          <div
+                            className={`p-4 rounded-2xl border flex items-center justify-between shadow-sm transition-all ${
+                              isCritical
+                                ? 'bg-red-50/90 border-red-300 text-red-950'
+                                : isUrgent
+                                ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                                : 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3.5">
+                              <div
+                                className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-black text-white shadow-md ${
+                                  isCritical
+                                    ? 'bg-red-600'
+                                    : isUrgent
+                                    ? 'bg-amber-600'
+                                    : 'bg-emerald-600'
+                                }`}
+                              >
+                                <span className="text-xl leading-none">{calculatedScore}%</span>
+                                <span className="text-[9px] uppercase tracking-wider opacity-90">Risk</span>
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black uppercase tracking-wider text-slate-900">
+                                    Evaluated Triage Risk Score
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                      isCritical
+                                        ? 'bg-red-200 text-red-900'
+                                        : isUrgent
+                                        ? 'bg-amber-200 text-amber-900'
+                                        : 'bg-emerald-200 text-emerald-900'
+                                    }`}
+                                  >
+                                    {selectedSession.triage_priority.toUpperCase()}
+                                  </span>
+                                </div>
+                                <p className="text-xs mt-1 font-medium text-slate-700">
+                                  {isCritical
+                                    ? 'Critical Priority — Immediate ECG & Senior Clinician Review'
+                                    : isUrgent
+                                    ? 'Urgent Review — Fast-track OPD Chamber consultation'
+                                    : 'Routine / Stable — Standard consultation protocol'}
+                                </p>
+                              </div>
+                            </div>
+                            <HeartPulse
+                              className={`w-7 h-7 shrink-0 ${
+                                isCritical ? 'text-red-600 animate-pulse' : isUrgent ? 'text-amber-600' : 'text-emerald-600'
+                              }`}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                      {/* Structured Gemini Medical Core Intake Analysis */}
+                      <div className="bg-gradient-to-br from-slate-900 via-[#0F2E4A] to-slate-900 text-white p-5 rounded-2xl shadow-lg border border-blue-900/60 space-y-3">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+                            <span className="font-extrabold text-xs uppercase tracking-wider text-cyan-300">
+                              Gemini Medical Core™ — Structured Clinical Synthesis
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono bg-white/10 text-slate-300 px-2 py-0.5 rounded border border-white/10">
+                            AI CLINICAL DOSSIER
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-200 leading-relaxed font-sans space-y-2 whitespace-pre-line">
+                          {selectedSession.gemini_summary ? (
+                            selectedSession.gemini_summary
+                          ) : (
+                            <>
+                              <div className="font-bold text-white flex items-center gap-1.5">
+                                <Stethoscope className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>Chief Clinical Assessment:</span>
+                              </div>
+                              <p>
+                                • Patient: <strong>{selectedSession.patient_name}</strong> ({selectedSession.age}Y / {selectedSession.gender}) presented with: <em>{selectedSession.chief_complaint}</em>.
+                              </p>
+                              <p>
+                                • Triage Assessment: <strong className="text-cyan-300">{selectedSession.triage_priority.toUpperCase()}</strong> ({selectedSession.risk_score || (selectedSession.triage_priority === 'critical' ? 92 : selectedSession.triage_priority === 'urgent' ? 68 : 24)}% Evaluated Risk).
+                              </p>
+                              <p>
+                                • Vitals Screen: BP {selectedSession.vitals?.bp}, SpO2 {selectedSession.vitals?.spo2}, Pulse {selectedSession.vitals?.pulse}, Temp {selectedSession.vitals?.temp}.
+                              </p>
+                              <p>
+                                • Recommended Action: Immediate dispatch to {selectedSession.chamber_room || 'Room 104'}.
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Vitals Quick Strip */}
                       {selectedSession.vitals && (
                         <div className="grid grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">

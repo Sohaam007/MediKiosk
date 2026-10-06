@@ -420,3 +420,49 @@ def generate_next_question(
 
     # Turn 5+ conclusion
     return _CONCLUSION_QUESTIONS.get(norm_lang, _CONCLUSION_QUESTIONS["en"])
+
+
+_NEGATION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(
+        r"\b(no\s*concern|no\s*concerns|no\s*other|no\s*more|nothing\s*else|nothing|none|nope|no|"
+        r"not\s*really|that['']?s\s*all|that\s*is\s*all|all\s*good|all\s*fine|fine|ready\s*to\s*see|"
+        r"ready|done)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(कोई\s*(अन्य|और)?\s*समस्या\s*नहीं|कुछ\s*नहीं|और\s*कुछ\s*नहीं|नहीं|सब\s*ठीक\s*है|तैयार\s*हूँ|"
+        r"koi\s*(aur|bhi)?\s*(samasya|takleef)?\s*nahi|kuch\s*nahi|aur\s*kuch\s*nahi|nahi|nahin|"
+        r"sab\s*theek|theek\s*hai|ready)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(অন্য\s*কোনো\s*সমস্যা\s*নেই|কিছু\s*না|আর\s*কিছু\s*নেই|না|সব\s*ঠিক\s*আছে)", re.IGNORECASE),
+    re.compile(r"(வேறு\s*புகார்கள்\s*இல்லை|வேறு\s*ஒன்றுமில்லை|இல்லை|எல்லாம்\s*சரி)", re.IGNORECASE),
+    re.compile(r"(వేరే\s*సమస్యలు\s*లేవు|ఇంకేమీ\s*లేదు|లేదు|అంతా\s*బాగుంది)", re.IGNORECASE),
+    re.compile(r"(इतर\s*कोणतीही\s*तक्रार\s*नाही|काही\s*नाही|नाही|सर्व\s*ठीक\s*आहे)", re.IGNORECASE),
+    re.compile(r"(અન્ય\s*કોઈ\s*સમસ્યા\s*નથી|કંઈ\s*નથી|ના|બધું\s*બરાબર\s*છે)", re.IGNORECASE),
+    re.compile(r"(ಬೇರೆ\s*ಯಾವುದೇ\s*ತೊಂದರೆ\s*ಇಲ್ಲ|ಏನೂ\s*ಇಲ್ಲ|ಇಲ್ಲ|ಎಲ್ಲವೂ\s*ಸರಿಯಾಗಿದೆ)", re.IGNORECASE),
+)
+
+
+def is_concluding_response(text: str) -> bool:
+    """Return True if patient response conveys negative/concluding intent."""
+    if not text:
+        return False
+    clean = text.strip()
+    return any(p.search(clean) for p in _NEGATION_PATTERNS)
+
+
+def get_termination_acknowledgement(lang: str) -> str:
+    """Return localised acknowledgement when intake concludes."""
+    norm_lang = normalize_language(lang)
+    acks = {
+        "en": "Thank you. Your clinical intake is complete. Proceeding to prescription scanning and doctor consultation.",
+        "hi": "धन्यवाद। आपकी प्राथमिक जांच पूरी हो गई है। अब डॉक्टर चयन और पर्चा स्कैन की ओर बढ़ते हैं।",
+        "bn": "ধন্যবাদ। প্রাথমিক উপসর্গ মূল্যায়ন সম্পূর্ণ হয়েছে। এবার প্রেসক্রিপশন স্ক্যান ও ডাক্তার নির্বাচনের দিকে যাচ্ছি।",
+        "ta": "நன்றி. உங்கள் முதற்கட்ட விவரங்கள் பெறப்பட்டன. மருந்து சீட்டு மற்றும் மருத்துவர் தேர்வுக்கு செல்கிறோம்.",
+        "te": "ధన్యవాదాలు. మీ ప్రాథమిక పరిశీలన పూర్తయింది. ప్రిస్క్రిప్షన్ మరియు వైద్యుడి ఎంపికకు వెళ్తున్నాము.",
+        "mr": "धन्यवाद. आपली प्राथमिक तपासणी पूर्ण झाली आहे. पुढील टप्प्याकडे जात आहोत.",
+        "gu": "આભાર. તમારી પ્રાથમિક તપાસ પૂર્ણ થઈ છે. હવે પ્રિસ્ક્રિપ્શન સ્કેન અને ડૉક્ટર પસંદગી તરફ આગળ વધીએ છીએ.",
+        "kn": "ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಪ್ರಾಥಮಿಕ ವಿವರಗಳು ಪೂರ್ಣಗೊಂಡಿವೆ. ಮುಂದಿನ ಹಂತಕ್ಕೆ ಸಾಗುತ್ತಿದ್ದೇವೆ.",
+    }
+    return acks.get(norm_lang, acks["en"])

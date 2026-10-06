@@ -1153,3 +1153,97 @@ export function getFollowUpQuestion(
 
   return createFollowUpResponse(rawStep.question, rawStep.quickReplies);
 }
+
+/**
+ * Detects whether patient response conveys negative/concluding intent
+ * (e.g. "no concern", "no", "nothing", "nahi", "kuch nahi", "sab theek hai", etc.).
+ */
+export function isConcludingOrNegativeResponse(text: string): boolean {
+  if (!text) return false;
+  const clean = text.trim().toLowerCase();
+
+  const NEGATION_PATTERNS = [
+    // English
+    /\b(no\s*concern|no\s*concerns|no\s*other|no\s*more|nothing\s*else|nothing|none|nope|no|nah|not\s*really|that['']?s\s*all|that\s*is\s*all|all\s*good|all\s*fine|fine|ready\s*to\s*see|ready|done)\b/i,
+    // Hindi & Hinglish
+    /(कोई\s*(अन्य|और)?\s*समस्या\s*नहीं|कुछ\s*नहीं|और\s*कुछ\s*नहीं|नहीं|सब\s*ठीक\s*है|तैयार\s*हूँ|koi\s*(aur|bhi)?\s*(samasya|takleef)?\s*nahi|kuch\s*nahi|aur\s*kuch\s*nahi|nahi|nahin|sab\s*theek|theek\s*hai|ready)/i,
+    // Bengali
+    /(অন্য\s*কোনো\s*সমস্যা\s*নেই|কিছু\s*না|আর\s*কিছু\s*নেই|না|সব\s*ঠিক\s*আছে)/i,
+    // Tamil
+    /(வேறு\s*புகார்கள்\s*இல்லை|வேறு\s*ஒன்றுமில்லை|இல்லை|எல்லாம்\s*சரி)/i,
+    // Telugu
+    /(వేరే\s*సమస్యలు\s*లేవు|ఇంకేమీ\s*లేదు|లేదు|అంతా\s*బాగుంది)/i,
+    // Marathi
+    /(इतर\s*कोणतीही\s*तक्रार\s*नाही|काही\s*नाही|नाही|सर्व\s*ठीक\s*आहे)/i,
+    // Gujarati
+    /(અન્ય\s*કોઈ\s*સમસ્યા\s*નથી|કંઈ\s*નથી|ના|બધું\s*બરાબર\s*છે)/i,
+    // Kannada
+    /(ಬೇರೆ\s*ಯಾವುದೇ\s*ತೊಂದರೆ\s*ಇಲ್ಲ|ಏನೂ\s*ಇಲ್ಲ|ಇಲ್ಲ|ಎಲ್ಲವೂ\s*ಸರಿಯಾಗಿದೆ)/i,
+  ];
+
+  return NEGATION_PATTERNS.some((pattern) => pattern.test(clean));
+}
+
+/**
+ * Returns localized verbal acknowledgement when intake is terminated by user.
+ */
+export function getTerminationAcknowledgement(lang: string): string {
+  const norm = normalizeLanguage(lang);
+  const ACKS: Record<SupportedLanguage, string> = {
+    en: 'Thank you. Your clinical intake is complete. Proceeding to prescription scanning and doctor consultation.',
+    hi: 'धन्यवाद। आपकी प्राथमिक जांच पूरी हो गई है। अब डॉक्टर चयन और पर्चा स्कैन की ओर बढ़ते हैं।',
+    bn: 'ধন্যবাদ। প্রাথমিক উপসর্গ মূল্যায়ন সম্পূর্ণ হয়েছে। এবার প্রেসক্রিপশন স্ক্যান ও ডাক্তার নির্বাচনের দিকে যাচ্ছি।',
+    ta: 'நன்றி. உங்கள் முதற்கட்ட விவரங்கள் பெறப்பட்டன. மருந்து சீட்டு மற்றும் மருத்துவர் தேர்வுக்கு செல்கிறோம்.',
+    te: 'ಧನ್ಯವಾದಗಳು. మీ ప్రాథమిక పరిశీలన పూర్తయింది. ప్రిస్క్రిప్షన్ మరియు వైద్యుడి ఎంపికకు వెళ్తున్నాము.',
+    mr: 'धन्यवाद. आपली प्राथमिक तपासणी पूर्ण झाली आहे. पुढील टप्प्याकडे जात आहोत.',
+    gu: 'આભાર. તમારી પ્રાથમિક તપાસ પૂર્ણ થઈ છે. હવે પ્રિસ્ક્રિપ્શન સ્કેન અને ડૉક્ટર પસંદગી તરફ આગળ વધીએ છીએ.',
+    kn: 'ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಪ್ರಾಥಮಿಕ ವಿವರಗಳು ಪೂರ್ಣಗೊಂಡಿವೆ. ಮುಂದಿನ ಹಂತಕ್ಕೆ ಸಾಗುತ್ತಿದ್ದೇವೆ.',
+  };
+  return ACKS[norm] || ACKS.en;
+}
+
+export interface DoctorRecommendation {
+  department: string;
+  recommendedDoctorName: string;
+  reason: string;
+  urgencyLevel: 'critical' | 'urgent' | 'routine';
+  riskScore: number;
+}
+
+/**
+ * Maps the detected symptom presentation to the most appropriate clinical specialty.
+ */
+export function getDoctorRecommendation(
+  detectedCategory: SymptomCategory | string
+): DoctorRecommendation {
+  switch (detectedCategory) {
+    case 'chest_pain':
+      return {
+        department: 'Cardiology',
+        recommendedDoctorName: 'Dr. Devi Shetty',
+        reason: 'Recommended for acute chest tightness / cardiac evaluation',
+        urgencyLevel: 'critical',
+        riskScore: 92,
+      };
+    case 'fever':
+    case 'cough':
+    case 'headache':
+      return {
+        department: 'General Medicine',
+        recommendedDoctorName: 'Dr. Rahul Verma',
+        reason: 'Recommended for acute febrile illness, respiratory symptoms, and general medicine',
+        urgencyLevel: 'urgent',
+        riskScore: 68,
+      };
+    case 'stomach_pain':
+    case 'general':
+    default:
+      return {
+        department: 'AYUSH',
+        recommendedDoctorName: 'Vaidya Anjali Joshi',
+        reason: 'Recommended for digestive, metabolic, and integrative wellness evaluation',
+        urgencyLevel: 'routine',
+        riskScore: 24,
+      };
+  }
+}
