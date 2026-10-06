@@ -1,21 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export function useTimer(isActive: boolean = true) {
   const [seconds, setSeconds] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
     if (isActive) {
-      interval = setInterval(() => {
+      intervalRef.current = setInterval(() => {
         setSeconds((prev) => prev + 1);
       }, 1000);
-    } else if (!isActive && seconds !== 0 && interval) {
-      clearInterval(interval);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     }
+
     return () => {
-      if (interval) clearInterval(interval);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [isActive, seconds]);
+  }, [isActive]);
 
   const reset = useCallback(() => setSeconds(0), []);
 
