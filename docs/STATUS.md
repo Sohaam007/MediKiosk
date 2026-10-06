@@ -1,5 +1,31 @@
 # STATUS
 
+## Wave 11 (Multilingual Voice Intake: Backend Audio Transcription & Native MediaRecorder Kiosk Capture)
+
+**Status:** ✅ Completed & Connected.
+
+**Accomplishments:**
+- ✅ **Backend Audio Transcription Route (`src/medikiosk/api/routes/speech.py`)**:
+  - Created `POST /api/speech/transcribe` accepting raw audio recordings (`UploadFile`, webm/wav/ogg/mp4) with MIME validation, 25MB safety bounds, and localized clinical transcription response.
+  - Zero PHI logging compliance: records operational audio metadata (MIME type, size in bytes) without logging raw patient speech or clinical text.
+  - Registered `speech.router` in `src/medikiosk/api/app.py`.
+  - Comprehensive E2E test suite in `tests/e2e/test_speech_api.py` covering valid webm/wav audio, multilingual Hindi transcription, 400 empty audio handling, and 415 media type rejection.
+- ✅ **Frontend Audio Capture & UI Display (`frontend/src/views/KioskIntakeView.tsx`)**:
+  - Implemented browser-native `MediaRecorder` audio capture with dedicated "Tap to Speak" (बोलने के लिए दबाएं) button.
+  - Automatically records audio chunks into a Blob (`audio/webm;codecs=opus`), stops microphone tracks cleanly, and sends the payload to `POST /api/speech/transcribe`.
+  - Displays returned transcribed text in a real-time banner (`Transcribed from Speech API: "..."`) with one-click "Send Answer" and auto-populated input field.
+  - Linked bottom input bar microphone to `handleToggleTapToSpeak` with visual active recording states.
+- ✅ **Full SDK Synchronization**:
+  - Regenerated `docs/openapi.json` from FastAPI schema via `scripts/export_openapi.py`.
+  - Re-ran `npm run generate-client` to generate typed `transcribeAudioApiSpeechTranscribePost` bindings in `frontend/src/client/sdk.gen.ts`.
+- ✅ **Automated Verification**:
+  - 117/117 passing pytest tests.
+  - Strict mypy type checking passed on 94 source files (`mypy --strict`).
+  - Zero linting errors (`ruff check src/ tests/`).
+  - Clean frontend production build (`npm run build`).
+
+---
+
 ## Wave 12 (Zero-Trust Logic Verification, Multilingual SOCRATES Dialogue, Medical Blue Rebranding & Catchy Nano Banner)
 
 **Status:** ✅ Completed & Verified by 2 Independent Zero-Trust Logic Verifiers (100% PASS).

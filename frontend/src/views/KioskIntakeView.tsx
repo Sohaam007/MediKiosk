@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Mic,
-  MicOff,
   Send,
   Volume2,
   VolumeX,
@@ -21,6 +20,7 @@ import {
   Bell,
   Sparkles,
   FileText,
+  Square,
 } from 'lucide-react';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { EmergencyAlertModal } from '../components/EmergencyAlertModal';
@@ -48,6 +48,7 @@ import {
   listPackagesApiPackagesGet,
   selectDoctorApiIntakeSelectDoctorPost,
   selectPackageApiIntakeSelectPackagePost,
+  transcribeAudioApiSpeechTranscribePost,
 } from '../client/sdk.gen';
 import type { DoctorResponse, PackageResponse } from '../client/types.gen';
 
@@ -232,6 +233,24 @@ export function KioskIntakeView() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
 
+  // Wave 11: Native MediaRecorder Audio Capture & Backend Transcription (/api/speech/transcribe)
+  const [isRecordingAudio, setIsRecordingAudio] = useState<boolean>(false);
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState<boolean>(false);
+  const [lastTranscribedSnippet, setLastTranscribedSnippet] = useState<string | null>(null);
+  const [audioRecordingError, setAudioRecordingError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Clean up microphone tracks on unmount
+  useEffect(() => {
+    return () => {
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
   // Hook-powered Voice Recognition with real Web Audio level
   const {
     isListening,
@@ -239,7 +258,6 @@ export function KioskIntakeView() {
     finalTranscript,
     audioLevel,
     hasAudioInput,
-    startListening,
     stopListening,
     resetTranscript,
   } = useVoiceInput({
@@ -520,24 +538,113 @@ export function KioskIntakeView() {
     }
   };
 
-  // Toggle Voice Input Recognition
-  const handleToggleVoice = () => {
-    if (isListening) {
-      stopListening();
-    } else {
-      if (isSpeaking) {
-        stopTTS();
-      }
-      startListening();
-    }
-  };
-
   // Re-read current question
   const handleReplayQuestion = () => {
     if (isSpeaking) {
       stopTTS();
     } else {
       speak(currentQuestion, activeLocale);
+    }
+  };
+
+  // Wave 11: Start recording audio using native MediaRecorder API
+  const handleStartAudioRecording = async () => {
+    try {
+      setAudioRecordingError(null);
+      if (isSpeaking) {
+        stopTTS();
+      }
+      if (isListening) {
+        stopListening();
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      let mimeType = 'audio/webm';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        }
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach((track) => track.stop());
+          audioStreamRef.current = null;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (audioBlob.size === 0) {
+          setAudioRecordingError('No audio recorded. Please speak clearly into the microphone.');
+          setIsTranscribingAudio(false);
+          setIsRecordingAudio(false);
+          return;
+        }
+
+        setIsTranscribingAudio(true);
+        try {
+          const res = await transcribeAudioApiSpeechTranscribePost({
+            body: {
+              file: audioBlob,
+              language: selectedLanguage,
+              session_id: sessionId || undefined,
+            },
+          });
+
+          if (res.data?.text) {
+            const transcribed = res.data.text;
+            setLastTranscribedSnippet(transcribed);
+            setInputText((prev) => (prev ? `${prev} ${transcribed}` : transcribed));
+          }
+        } catch {
+          setAudioRecordingError('Failed to transcribe audio from backend. Please try typing or retry.');
+        } finally {
+          setIsTranscribingAudio(false);
+          setIsRecordingAudio(false);
+        }
+      };
+
+      recorder.start(250);
+      setIsRecordingAudio(true);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setAudioRecordingError(
+        errMsg.includes('Permission') || errMsg.includes('NotAllowedError')
+          ? 'Microphone permission denied. Please allow microphone access in your browser settings.'
+          : 'Could not access microphone input on this device.'
+      );
+      setIsRecordingAudio(false);
+    }
+  };
+
+  // Wave 11: Stop recording audio
+  const handleStopAudioRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  // Wave 11: Toggle Tap to Speak
+  const handleToggleTapToSpeak = () => {
+    if (isRecordingAudio) {
+      handleStopAudioRecording();
+    } else {
+      void handleStartAudioRecording();
     }
   };
 
@@ -660,6 +767,11 @@ export function KioskIntakeView() {
     stopListening();
     resetTranscript();
     stopTTS();
+    if (isRecordingAudio) {
+      handleStopAudioRecording();
+    }
+    setLastTranscribedSnippet(null);
+    setAudioRecordingError(null);
 
     // Reset intake states
     setSessionId('');
@@ -1060,6 +1172,99 @@ export function KioskIntakeView() {
                 </p>
               </div>
 
+              {/* Wave 11: Multilingual Tap-to-Speak Banner (MediaRecorder -> /api/speech/transcribe) */}
+              <div className="px-6 py-3.5 bg-gradient-to-r from-blue-50 to-indigo-50/60 border-b border-blue-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleToggleTapToSpeak}
+                    disabled={isTranscribingAudio || isLoading || isAutoTransitioning}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-extrabold text-xs shadow-md transition-all active:scale-95 ${
+                      isRecordingAudio
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse ring-4 ring-rose-300'
+                        : isTranscribingAudio
+                        ? 'bg-indigo-600 text-white cursor-wait'
+                        : 'bg-[#0F2E4A] hover:bg-[#1E3A8A] text-white'
+                    }`}
+                  >
+                    {isRecordingAudio ? (
+                      <>
+                        <Square className="w-4 h-4 fill-white" />
+                        <span>Stop Recording & Transcribe (सुनना बंद करें)</span>
+                      </>
+                    ) : isTranscribingAudio ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-cyan-300" />
+                        <span>Transcribing Audio (/api/speech/transcribe)...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-4 h-4 text-cyan-300 animate-pulse" />
+                        <span>Tap to Speak (बोलने के लिए दबाएं)</span>
+                      </>
+                    )}
+                  </button>
+
+                  <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">
+                    {isRecordingAudio
+                      ? '🎙️ Recording audio via native MediaRecorder... Tap button when finished'
+                      : isTranscribingAudio
+                      ? '⚡ Sending audio blob to MediKiosk Speech API...'
+                      : `🎤 Tap to speak in ${selectedLanguage.toUpperCase()} — raw audio is converted to text automatically`}
+                  </span>
+                </div>
+
+                {isRecordingAudio && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-100 border border-rose-300 rounded-full text-rose-700 font-extrabold text-[10px] animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                    <span>RECORDING BLOB ACTIVE</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Display Returned Transcribed Text Snippet in UI */}
+              {lastTranscribedSnippet && (
+                <div className="mx-6 mt-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs text-emerald-950 shadow-sm animate-in fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-extrabold uppercase text-[10px] tracking-wider text-emerald-800 block">
+                        Transcribed from Speech API (/api/speech/transcribe):
+                      </span>
+                      <span className="font-bold text-emerald-900 text-sm">
+                        "{lastTranscribedSnippet}"
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSendResponse(lastTranscribedSnippet)}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition active:scale-95"
+                    >
+                      Send Answer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLastTranscribedSnippet(null)}
+                      className="text-slate-400 hover:text-slate-600 text-base px-1.5 font-bold"
+                      title="Dismiss"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {audioRecordingError && (
+                <div className="mx-6 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-rose-800">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{audioRecordingError}</span>
+                </div>
+              )}
+
               {/* Chat Messages Stream */}
               <div
                 ref={chatScrollRef}
@@ -1133,27 +1338,40 @@ export function KioskIntakeView() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleToggleVoice}
+                    onClick={handleToggleTapToSpeak}
+                    disabled={isTranscribingAudio || isLoading || isAutoTransitioning}
                     className={`min-w-[56px] min-h-[56px] rounded-2xl text-white shadow-md flex items-center justify-center transition-all ${
-                      isListening
+                      isRecordingAudio
+                        ? 'bg-rose-600 animate-pulse ring-4 ring-rose-400/40'
+                        : isTranscribingAudio
+                        ? 'bg-indigo-600 animate-pulse'
+                        : isListening
                         ? 'bg-rose-600 animate-pulse ring-4 ring-rose-400/40'
                         : 'bg-[#0F2E4A] hover:bg-[#1E3A8A]'
                     }`}
-                    title={isListening ? 'Stop listening' : 'Start speaking'}
+                    title={isRecordingAudio ? 'Stop recording & transcribe' : 'Tap to speak'}
                   >
-                    {isListening ? <Mic className="w-6 h-6 animate-bounce" /> : <MicOff className="w-6 h-6" />}
+                    {isRecordingAudio ? (
+                      <Square className="w-5 h-5 fill-white" />
+                    ) : isTranscribingAudio ? (
+                      <RefreshCw className="w-5 h-5 animate-spin text-cyan-300" />
+                    ) : isListening ? (
+                      <Mic className="w-6 h-6 animate-bounce" />
+                    ) : (
+                      <Mic className="w-6 h-6" />
+                    )}
                   </button>
 
                   {/* Real-time Dynamic Sound-Wave Visualizer */}
-                  {isListening && (
+                  {(isListening || isRecordingAudio) && (
                     <div className="flex items-center gap-1 px-3 py-2 bg-rose-50 border border-rose-200 rounded-xl">
                       <span className="text-[11px] font-bold text-rose-700 mr-1.5 flex items-center gap-1">
                         <span
                           className={`w-2 h-2 rounded-full ${
-                            hasAudioInput ? 'bg-emerald-500 animate-ping' : 'bg-rose-600 animate-pulse'
+                            hasAudioInput || isRecordingAudio ? 'bg-emerald-500 animate-ping' : 'bg-rose-600 animate-pulse'
                           }`}
                         />
-                        {hasAudioInput ? 'Audio Active' : 'Listening'}
+                        {isRecordingAudio ? 'Recording' : hasAudioInput ? 'Audio Active' : 'Listening'}
                       </span>
                       {[0.4, 0.9, 1.3, 0.7, 1.1, 0.5, 1.0, 0.6].map((multiplier, idx) => {
                         const level = audioLevel > 0 ? audioLevel : 18;
@@ -1176,7 +1394,11 @@ export function KioskIntakeView() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendResponse()}
                   placeholder={
-                    isListening
+                    isRecordingAudio
+                      ? 'Recording audio... Speak your symptoms clearly'
+                      : isTranscribingAudio
+                      ? 'Transcribing audio with MediKiosk Speech API...'
+                      : isListening
                       ? 'Listening... speak clearly into the kiosk mic'
                       : 'Type or speak your answer in your chosen language...'
                   }
@@ -1185,7 +1407,7 @@ export function KioskIntakeView() {
 
                 <button
                   type="button"
-                  disabled={!inputText.trim() || isLoading || isAutoTransitioning}
+                  disabled={!inputText.trim() || isLoading || isAutoTransitioning || isTranscribingAudio}
                   onClick={() => handleSendResponse()}
                   className="min-w-[56px] min-h-[56px] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl shadow-md flex items-center justify-center transition active:scale-95"
                 >
