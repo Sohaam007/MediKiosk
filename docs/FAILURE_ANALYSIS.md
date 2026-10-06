@@ -1,140 +1,80 @@
-# Failure analysis
+# Failure Analysis and Mitigation
 
-## Part 1: Process failures we have observed or anticipate
+This document tracks known failure modes—both historical (from hackathons) and anticipated in production—along with their mitigation strategies.
 
-### 1. ASR hallucination on medical terms
+## Part 1: Hackathon Failures
 
-**Evidence:** Whisper and IndicASR models hallucinate on domain-specific medical terminology
-(Ayurvedic formulations, SNOMED terms, Indian drug brand names) that are underrepresented in
-training data.
+These are critical issues experienced during the initial prototype phase.
 
-**Cause:** general-purpose ASR models are trained on conversational speech, not clinical vocabulary.
-
-**Now:** SPH-6 adds medical terminology fine-tuning. EVL-8 measures medical term WER separately.
-Until SPH-6 lands, the intake engine must use fuzzy matching against a medical term dictionary to
-correct common ASR errors.
-
-### 2. OCR failure on handwritten prescriptions
-
-**Evidence:** Indian physician handwriting is notoriously difficult for OCR. Existing benchmarks
-show Tesseract achieves < 40% accuracy on handwritten Indian prescriptions.
-
-**Cause:** no off-the-shelf OCR model is trained on Indian medical handwriting at scale.
-
-**Now:** OCR-2 adds handwriting recognition. The system must flag low-confidence OCR output
-(confidence < 0.5) for manual staff review rather than extracting incorrect entities silently.
-SYN-1 must mark summary sections sourced from low-confidence OCR.
-
-### 3. DPDP consent complexity in a kiosk environment
-
-**Evidence:** the DPDP Act requires informed, specific, purpose-limited consent. A kiosk patient
-may not read or understand a consent form, especially in a medical setting with anxiety.
-
-**Cause:** legal compliance requirements conflict with the need for a quick, frictionless intake.
-
-**Now:** CMP-2 implements consent as a voice-guided flow: the system reads the consent text aloud
-in the patient's language, displays it on screen, and requires a touch confirmation. Consent is
-per-purpose, not blanket. The consent text is stored verbatim as legal evidence.
-
-### 4. Triage false negatives are life-threatening
-
-**Evidence:** the red-flag triage system must have near-zero false negative rate for critical
-alerts. A missed chest pain presentation could delay emergency care.
-
-**Cause:** rule-based triage has known blind spots for atypical presentations (e.g., cardiac
-symptoms presenting as indigestion in elderly women).
-
-**Now:** INK-6 implements an explicit red-flag rule set with conservative thresholds. Any symptom
-that _could_ be an emergency triggers an alert, accepting higher false positive rate to ensure
-zero false negatives. EVL-10 measures this explicitly.
-
-### 5. ABDM sandbox vs production divergence
-
-**Evidence:** the ABDM sandbox API may behave differently from production. Response formats,
-error codes, and latency patterns may change between sandbox and production.
-
-**Cause:** ABDM is an evolving platform. Sandbox fidelity is not guaranteed.
-
-**Now:** INT-5 implements defensive parsing: accept any valid FHIR response, log unexpected
-fields without failing, and use feature flags to toggle between sandbox and production endpoints.
-Integration tests record the exact sandbox version and date.
-
-### 6. Multi-agent file conflicts
-
-**Evidence:** parallel agents working on different task domains may create conflicting edits
-to shared files (contracts, config, CI).
-
-**Cause:** the multi-agent swarm architecture allows concurrent work on different domains.
-
-**Now:** WORKFLOW.md defines file ownership. `core/contracts/` is owned by CMP-1 and frozen
-after P0. Shared files require review from the file owner. The task dependency DAG ensures
-no two P1 tasks modify the same contract type.
-
-### 7. Session data leakage between patients
-
-**Evidence:** a kiosk that does not properly purge session data could display one patient's
-information to the next patient.
-
-**Cause:** in-memory data, cached model outputs, and local storage may persist across sessions.
-
-**Now:** CMP-6 implements aggressive session termination: all in-memory data is cleared,
-local storage is wiped, and the kiosk UI resets to the idle screen. The purge is verified by
-`eval/tests/invariants/` scanning for residual session data after termination.
-
-### 8. LLM summary hallucination
-
-**Evidence:** LLMs generating clinical summaries may hallucinate symptoms, diagnoses, or
-medications that were never mentioned by the patient or found in OCR documents.
-
-**Cause:** language models are generative and may produce plausible but factually incorrect
-clinical content.
-
-**Now:** SYN-1 requires every statement in the summary to be traceable to a source entity ID
-from `IntakeSession` or `MedicalEntity`. EVL-9 checks factual grounding and flags any summary
-statement that cannot be traced to source data.
+| Issue | Evidence / Cause | Now (Mitigation) |
+|---|---|---|
+| 1. Session Data Loss | In-memory store lost all data on Railway cold starts. | Using durable Postgres database for session persistence. |
+| 2. No Input Validation | API accepted arbitrary JSON causing downstream crashes. | Strict Pydantic models for all API inputs and outputs. |
+| 3. Invalid FHIR Bundles | Output rejected by ABDM due to missing R4 validation. | Using FHIR validator adapter before finalizing payload. |
+| 4. Missing Auth | Any HTTP client could access any endpoint. | Implementing robust token-based Auth layer. |
+| 5. Insecure CORS | CORS set to `*`, exposing API to any origin. | Strict CORS policies tied to frontend domains. |
+| 6. Weak Consent Model | Single boolean flag, no audit trail. | DPDP-compliant hash-chained consent records. |
+| 7. Subagent Timeouts | Heavy write operations timed out the API. | Async background task processing for long operations. |
+| 8. Git Conflicts | Multiple agents overwrote `main.py`. | Structured Clean Architecture separates concerns. |
+| 9. LLM JSON Parsing Errors | 500 errors due to raw text instead of structured JSON. | Using strict JSON schema enforcement with LLM providers. |
+| 10. Zero Observability | Debugging required reading raw stdout logs. | Structured JSON logging (structlog) + trace IDs. |
 
 ---
 
-## Part 2: Runtime failure modes
+## Part 2: Production Failure Modes
 
-### Kiosk hardware failures
+Anticipated failures during live usage categorized by domain.
 
+### Voice & Language (R1-R5)
 | ID | Failure | What happens | Caught today | Closed by |
 |---|---|---|---|---|
-| K1 | Microphone disconnected mid-intake | ASR timeout after 5s | PLT-3 health check | PLT-3, UIK-2 fallback |
-| K2 | Camera fails during document capture | Capture returns error | PLT-3 health check | UIK-3 error UI |
-| K3 | Touchscreen unresponsive | No input detected | PLT-3 heartbeat | PLT-8 remote reboot |
-| K4 | Speaker failure during TTS | Consent text not heard | Not caught | SPH-2 visual fallback |
-| K5 | Disk full, cannot save session | Local storage write fails | Not caught | PLT-4 disk monitor |
+| R1 | ASR failure on dialect | Misunderstood symptoms | No | Server-side multi-language Whisper model |
+| R2 | Background noise interference | Garbage text ingested | Partial | SNR validation on client side |
+| R3 | Code-switching confusion | Broken translation | No | Advanced bilingual LLM prompt strategies |
+| R4 | Blank audio recording | Infinite waiting loop | No | Voice activity detection and timeout handlers |
+| R5 | Unrecognized terminology | Lost clinical context | No | Integration with SNOMED CT lookup |
 
-### Network and integration failures
-
+### Document Scanning (R6-R10)
 | ID | Failure | What happens | Caught today | Closed by |
 |---|---|---|---|---|
-| N1 | ABDM sandbox unreachable | FHIR push fails | Not caught | PLT-5 sync queue |
-| N2 | ABDM returns unexpected response format | JSON parse error | Not caught | INT-5 defensive parsing |
-| N3 | ABHA verification timeout | Patient stuck on auth | Not caught | CMP-5 timeout with fallback |
-| N4 | Hospital HIS rejects FHIR bundle | Push returns 422 | Not caught | INT-5 error handling |
-| N5 | Network partition during session | Partial data loss | Not caught | PLT-5 local-first |
+| R6 | Blurry image capture | OCR fails to extract text | No | Image quality scoring before upload |
+| R7 | Poor handwriting | Medical entities missed | Partial | State-of-the-art multimodal extraction |
+| R8 | Non-medical document uploaded | Hallucinates data | No | Document type classification gate |
+| R9 | Multi-page scan out of order | Confused timeline | No | Page sequencing metadata |
+| R10 | Low contrast scan | Partial data extraction | No | Contrast enhancement pre-processing |
 
-### AI and model failures
-
+### Clinical Reasoning (R11-R15)
 | ID | Failure | What happens | Caught today | Closed by |
 |---|---|---|---|---|
-| A1 | ASR returns empty transcript | Intake engine receives blank | Not caught | SPH-1 retry + minimum length check |
-| A2 | OCR confidence below threshold | Extracted text is garbage | Not caught | OCR-1 confidence gate |
-| A3 | Entity extraction maps wrong code | SNOMED/ICD code is incorrect | Not caught | EVL-7 code accuracy metric |
-| A4 | LLM refuses to generate summary | Summary engine returns empty | Not caught | SYN-1 retry with fallback prompt |
-| A5 | LLM generates in wrong language | Hindi prompt produces English | Not caught | SYN-2 language detection check |
-| A6 | Triage rule false positive | Staff alerted unnecessarily | Not caught | EVL-10 specificity metric |
-| A7 | Timeline dates resolve incorrectly | "2 months ago" maps wrong | Not caught | EXT-6 date resolution tests |
+| R11 | LLM Hallucination | Fake symptoms added to summary | No | Entity-grounded synthesis & evaluation harness |
+| R12 | Missed red flags | Delayed critical care | No | Deterministic triage rule engine |
+| R13 | Wrong medical coding | Billing or referral errors | No | Deterministic ICD/SNOMED exact-match lookups |
+| R14 | Question looping | Patient stuck answering same thing | No | Intake state machine tracks asked questions |
+| R15 | Conflicting timeline | Confusion for doctor | No | Strict date parsing and validation |
 
-### Data and consent failures
-
+### Data & Privacy (R16-R20)
 | ID | Failure | What happens | Caught today | Closed by |
 |---|---|---|---|---|
-| D1 | Patient revokes consent mid-session | Data must be purged immediately | Not caught | CMP-2 revocation handler |
-| D2 | Consent hash chain broken | Audit trail is unreliable | Not caught | CMP-4 chain verification |
-| D3 | Session timeout during FHIR submission | Bundle half-sent | Not caught | INT-5 transaction safety |
-| D4 | Duplicate patient record in ABDM | Two records for same person | Not caught | INT-1 deduplication |
-| D5 | PHI appears in error log | DPDP violation | Not caught | ENGINEERING.md rule, eval/invariants |
+| R16 | PHI leakage in logs | Compliance violation | Partial | Strict PHI-scrubbing log formatters |
+| R17 | Consent bypass | Unauthorized data sharing | No | Enforced DPDP consent checks in API |
+| R18 | Data retention breach | Old sessions persist | No | Automated cleanup jobs for inactive sessions |
+| R19 | ABDM push failure | Data not synced | No | Robust retry queue for ABDM payloads |
+| R20 | Unencrypted data at rest | Exposure on DB breach | No | Database column-level encryption for PHI |
+
+### Infrastructure (R21-R25)
+| ID | Failure | What happens | Caught today | Closed by |
+|---|---|---|---|---|
+| R21 | Database corruption | Total data loss | No | Daily backups & WAL archiving |
+| R22 | LLM API downtime | Intake process halts | No | Fallback LLM provider configuration |
+| R23 | Session timeout | Patient loses progress | Partial | Periodic state auto-saving |
+| R24 | Rate limiting hit | System unavailable | No | Proper tenant-based rate limits |
+| R25 | Cold start latency | Bad UX on first load | No | Provisioned concurrency / keep-alive ping |
+
+### User Experience (R26-R30)
+| ID | Failure | What happens | Caught today | Closed by |
+|---|---|---|---|---|
+| R26 | Kiosk unresponsive | Patient walks away | No | Frontend heartbeat & auto-reset |
+| R27 | Language mismatch | Cannot answer questions | No | Explicit language selection screen |
+| R28 | Session abandoned mid-intake | Kiosk locked for next | No | Inactivity timeouts with graceful exit |
+| R29 | Accessibility barriers | Cannot read screen | No | High-contrast UI and Voice read-aloud |
+| R30 | Too many questions | Patient fatigue | No | Dynamic intake capping |

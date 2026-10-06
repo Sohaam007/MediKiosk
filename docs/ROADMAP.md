@@ -1,223 +1,262 @@
-# Roadmap
+# MediKiosk Production Roadmap
 
-## The goal
+This roadmap outlines the path to production for the MediKiosk platform across 4 key phases.
 
-An AI-powered, self-service patient clinical intake kiosk that a patient at AIIA (All India
-Institute of Ayurveda) or any Ayush hospital walks up to, speaks to in their language, scans
-their existing documents into, and walks away from — leaving behind a structured, bilingual,
-physician-ready clinical history, a digitised medical record timeline, and a FHIR-compliant
-OPConsultation bundle pushed to the hospital's HIS via ABDM.
+## Phase 0: Foundation (Week 1-2) — Architecture Migration
 
-The system eliminates the OPD bottleneck where one physician spends 15–20 minutes taking history
-manually, replacing it with a 5–8 minute self-service intake that produces a more complete record.
+**Goal**: Move from hackathon monolith to a robust clean architecture.
 
-## Where we start
+- Migrate from hackathon monolith to clean architecture
+- Define domain contracts (all 14+ Pydantic models, including enterprise fields)
+- Define port interfaces (LLM, database, storage, cache, ABDM, audit, presence, telemetry)
+- Implement adapter implementations (Gemini, SQLAlchemy, local storage)
+- Write invariant tests (purity, imports, chokepoint, audit trail immutability)
+- Set up database schema + Alembic migrations
+- Build new FastAPI app with dependency injection
+- **Event-sourced audit trail** — append-only events table with database-level UPDATE/DELETE protection, `AuditEventType` enum, `adapters/database/audit_repo.py` implementing `ports/audit.py`
+- **CI/CD security pipeline** — GitHub Actions workflow with 7 gates: lint, type check, invariant tests, unit tests, security scan (pip-audit + bandit + gitleaks), PHI leak detection, container image scan (trivy). No PR merges without all gates passing.
+- **Three-layer AI SDLC** — establish the Write → Review → CI pipeline per `docs/AI_ORCHESTRATION.md`. Writing agent prompt templates, review agent checklists, and CI gatekeeper all operational before any domain code is written.
+- **Gate**: All invariant tests pass, domain tests pass, API serves requests, audit events are append-only verified, CI pipeline runs end-to-end.
 
-- No existing codebase. Clean start with the methodology scaffold.
-- PS 26047 specification from Ministry of Ayush / All India Institute of Ayurveda.
-- Open-source ASR models (Whisper, IndicASR) available but not integrated.
-- Open-source OCR engines (Tesseract, EasyOCR, PaddleOCR) available but not integrated.
-- FHIR R4 specification published; ABDM sandbox available.
-- No kiosk hardware yet — develop against a standard touchscreen + camera + microphone setup.
-- No clinical validation yet — synthetic data only until physician review.
+## Phase 1: Core Engine (Week 3-4) — Domain Logic
 
-## What PS 26047 requires and which tasks build it
+**Goal**: Implement the core clinical intake intelligence.
 
-| The problem statement says | Tasks | Proven by |
-|---|---|---|
-| AI-powered patient case-taking software | INK-1 through INK-8 | EVL-11 clinical scenario tests |
-| Voice-based interaction in Indian languages | SPH-1 through SPH-6 | EVL-8 ASR WER per language |
-| Touch-based fallback UI | UIK-1 through UIK-8 | EVL-8 usability metrics |
-| SOCRATES clinical questioning | INK-2, INK-3 | EVL-5 clinical completeness score |
-| Ayurvedic Dashavidha Pariksha | INK-4, INK-5 | EVL-5 Ayurvedic assessment coverage |
-| Red-flag emergency triage | INK-6 | EVL-10 triage sensitivity and specificity |
-| Document digitization (prescriptions, labs, discharge summaries) | OCR-1 through OCR-6 | EVL-6 OCR accuracy |
-| Entity extraction (medications, diagnoses, lab values) | EXT-1 through EXT-5 | EVL-7 entity F1 |
-| Chronological clinical timeline | EXT-6 | EVL-7 timeline ordering accuracy |
-| Bilingual clinical summary (Hindi + English) | SYN-1 through SYN-4 | EVL-9 physician acceptance rate |
-| DPDP Act 2023 compliance | CMP-1 through CMP-7 | EVL-12 compliance audit |
-| ABHA ID authentication | CMP-5, INT-1 | EVL-12 ABDM interop test |
-| FHIR OPConsultation bundle | INT-2 through INT-4 | EVL-12 FHIR validation |
-| HIS/EMR integration via ABDM | INT-5, INT-6 | EVL-12 integration test |
-| Self-service kiosk operation | PLT-3, UIK-1, UIK-7 | EVL-11 end-to-end kiosk flow |
+- Intake engine with full SOCRATES protocol implementation
+- Dashavidha Pariksha (Ayurvedic assessment) integration
+- OCR pipeline with entity extraction + medical coding (SNOMED/ICD/LOINC)
+- Clinical timeline builder
+- Triage engine with red-flag detection
+- Consent engine with DPDP audit chain
+- **Proxy/Attendant handling** — intake engine must ask "Who is providing this history?" at session start and record `informant_type` + `informant_relationship` in the `SessionState`. Downstream summary must note proxy attribution.
+- **Conversation Frustration Index (CFI)** — intake engine increments `frustration_index` on low ASR confidence, repeated questions, long pauses, and explicit confusion. When CFI ≥ threshold, `human_fallback_triggered = True` and no further AI questions are generated. Service layer routes the patient to a staff desk.
+- **Gate**: Clinical completeness ≥ 70%, OCR F1 ≥ 65%, CFI-triggered fallback fires correctly in test scenarios.
 
-## The rubric
+## Phase 2: Synthesis & Integration (Week 5-6)
 
-| # | Criterion | Weight | Measured by |
-|---|---|---|---|
-| 1 | Clinical completeness and accuracy | 25% | SOCRATES coverage, Dashavidha completeness, red-flag sensitivity, HPI depth |
-| 2 | Document intelligence accuracy | 20% | OCR character accuracy, entity extraction F1, timeline correctness, code mapping |
-| 3 | Summary quality | 20% | Physician acceptance rate, bilingual accuracy, SNOMED coding, section completeness |
-| 4 | System performance | 20% | ASR latency, OCR throughput, end-to-end intake time, kiosk resource usage |
-| 5 | Compliance and integration | 15% | DPDP consent compliance, FHIR validation pass rate, ABDM interop, ABHA auth |
+**Goal**: Finalize system integration and data export capabilities.
 
-## Phases and gates
+- Bilingual summary synthesis engine
+- FHIR R4 bundle generation with validation
+- ABDM integration (mock → real gateway)
+- Frontend update for new API integration
+- Authentication & authorization setup
+- Rate limiting, logging, monitoring setup
+- **Acoustic biomarkers pipeline** — `VoiceCapture` adapter computes `speech_rate_wpm`, `cough_events_detected`, and `max_pause_duration_seconds` from each audio segment. These telemetry fields feed into the triage engine (e.g., persistent cough → respiratory flag, bradyphrenia → neurological flag).
+- **Medico-legal transcript hash** — `FHIRBundle` builder computes `source_transcript_hash` (SHA-256 of all concatenated source transcripts + OCR text) and embeds it in the bundle. This creates a cryptographic chain from raw patient input to FHIR output.
+- **Gate**: End-to-end workflow passes, FHIR validation 100%, `source_transcript_hash` verified in bundle, acoustic biomarkers populate in test scenarios.
 
-### P0 — Foundation
+## Phase 3: Production Hardening (Week 7-8)
 
-The system compiles, the contract types are frozen, the development environment works, and
-the baseline is measured.
+**Goal**: Prepare for real-world kiosk deployment and fleet scale.
 
-1. CMP-1: all 12 contract types in `core/contracts/` are defined and frozen.
-2. PLT-1: `bash scripts/setup.sh` gets a clean clone to a green `pytest`.
-3. PLT-2: core module split and build pipeline working.
-4. SPH-1: core ASR pipeline runs on a single language.
-5. OCR-1: core OCR pipeline runs on printed text.
-6. UIK-1: patient-facing touch UI shell renders with language selection.
-7. EVL-1: baseline v0 measurement recorded.
+- Evaluation harness with synthetic patient corpora
+- Performance benchmarks and optimization
+- Security audit
+- Multi-language ASR integration (server-side Whisper)
+- Deployment pipeline (CI/CD)
+- Documentation completion
+- **Walk-away privacy failsafe** — edge-vision presence detector (USB webcam / IR proximity sensor) triggers DPDP Ephemeral Purge after 15 seconds of no presence. Implements `ports/presence.py` with hardware and timer-based adapters. Frontend subscribes to `ws://localhost:9090/presence` for "Are you still there?" countdown.
+- **Fleet telemetry (IoT)** — parallel health heartbeat (printer status, mic health, disk space, network latency, camera status) via `ports/telemetry.py` + `adapters/hardware/fleet_telemetry.py`. Fire-and-forget channel, zero PHI, null adapter in dev/browser mode.
+- **Zero-Trust kiosk hardening** — TPM-sealed disk encryption, secure boot chain, USB port lockdown, mTLS between kiosk and API gateway, read-only root filesystem. Per `docs/SECURITY.md` §2 and `docs/decisions/0002-zero-trust-edge-security.md`.
+- **Penetration testing** — full threat model validation against `docs/SECURITY.md` §1. OWASP Top 10, LLM prompt injection, kiosk physical attack surface, ABDM integration security.
+- **Gate**: All success metrics from VISION.md met, walk-away purge verified on kiosk hardware, fleet telemetry dashboard receiving heartbeats, zero HIGH/CRITICAL findings in pen test.
 
-**Gate:** every P0 task is done, `pytest` and `mypy` pass, and the contract types are
-reviewed by the full team.
-
-### P1 — Core Capabilities
-
-The four modules work end-to-end: a patient can speak, scan documents, receive a summary,
-and the system produces a FHIR bundle.
-
-1. INK-2, INK-3: SOCRATES and general history-taking work.
-2. INK-4, INK-5: Dashavidha Pariksha assessment works.
-3. INK-6: red-flag triage fires alerts.
-4. SPH-2, SPH-3, SPH-4: TTS, Indian languages, and streaming ASR work.
-5. OCR-2, OCR-3, OCR-4, OCR-6: handwriting, lab reports, discharge summaries, and doc classification.
-6. EXT-1 through EXT-4, EXT-6: entity extraction and timeline.
-7. SYN-1, SYN-2: summary engine and bilingual output.
-8. CMP-2, CMP-4, CMP-5: DPDP consent, audit chain, ABHA auth.
-9. INT-1 through INT-4: ABHA lookup, FHIR bundle, Patient/Encounter/Observation.
-10. UIK-2, UIK-3, UIK-4: voice intake UI, document upload, progress indicator.
-11. PLT-4, PLT-6: telemetry and CI/CD.
-12. EVL-2 through EVL-13: all benchmarks and the ratchet.
-
-**Gate:** end-to-end demo on synthetic data. A patient scenario runs voice intake → document
-scan → entity extraction → summary → FHIR bundle, with all metrics above baseline.
-
-### P2 — Integration and Hardening
-
-Edge cases, multilingual expansion, ABDM push, offline mode, accessibility.
-
-1. INK-7, INK-8: multi-language intake, session persistence.
-2. SPH-5, SPH-6: noise-robust ASR, medical terminology fine-tuning.
-3. OCR-5: multilingual OCR.
-4. EXT-5: Ayurvedic formulation recognition.
-5. SYN-3, SYN-4: editable summary with SNOMED coding, Ayurvedic section.
-6. CMP-3, CMP-6, CMP-7: retention policy, auto-termination, anonymization.
-7. INT-5, INT-6: HIS push, health record pull.
-8. PLT-5, PLT-7: offline-first, Docker containerization.
-9. UIK-5 through UIK-8: physician review, accessibility, idle screen, multi-language UI.
-10. EVL-14: rubric report.
-
-**Gate:** ABDM sandbox integration test passes. Offline demo works. Accessibility audit passes.
-
-### P3 — Demo-Ready
-
-Packaging, rehearsal, deployment to venue hardware.
-
-1. PLT-8: kiosk provisioning and fleet management.
-2. Full rehearsal with synthetic patients on venue hardware.
-3. Offline deployment package with all models bundled.
-4. Demo script with 3 clinical scenarios (modern medicine + Ayurvedic + emergency triage).
-
-**Gate:** the demo runs without internet on venue hardware, and the rubric report covers
-all five criteria.
-
-## Areas
-
-| Area | Tag | Task file | Reviewer | Tracks |
-|---|---|---|---|---|
-| Clinical Intake | INK | `docs/tasks/INTAKE.md` | Agent-A | core/intake/, kiosk/ui/ |
-| Speech Pipeline | SPH | `docs/tasks/SPEECH.md` | Agent-B | kiosk/speech/ |
-| Document OCR | OCR | `docs/tasks/OCR.md` | Agent-C | kiosk/ocr/, kiosk/camera/ |
-| Entity Extraction | EXT | `docs/tasks/EXTRACTION.md` | Agent-A | core/extraction/, core/timeline/ |
-| Clinical Synthesis | SYN | `docs/tasks/SYNTHESIS.md` | Agent-D | core/synthesis/, server/inference/ |
-| Compliance & Consent | CMP | `docs/tasks/COMPLIANCE.md` | Agent-E | core/consent/, core/contracts/ |
-| FHIR & Integration | INT | `docs/tasks/INTEGRATION.md` | Agent-D | core/fhir/, server/abdm/ |
-| Platform & Kiosk | PLT | `docs/tasks/PLATFORM.md` | Agent-F | scripts/, server/deploy/ |
-| Evaluation | EVL | `docs/tasks/EVALUATION.md` | Agent-C | eval/ |
-| Kiosk UI/UX | UIK | `docs/tasks/KIOSK_UI.md` | Agent-B | kiosk/ui/, kiosk/session/ |
-
-## The dependencies that shape the order
+## Dependency DAG
 
 ```mermaid
-flowchart LR
-    CMP1["CMP-1: Contracts"] --> INK1["INK-1: Demographics"]
-    CMP1 --> SPH1["SPH-1: ASR Core"]
-    CMP1 --> OCR1["OCR-1: OCR Core"]
-    CMP1 --> UIK1["UIK-1: UI Shell"]
-    CMP1 --> CMP2["CMP-2: DPDP Consent"]
-    CMP1 --> CMP5["CMP-5: ABHA Auth"]
-    CMP1 --> PLT4["PLT-4: Telemetry"]
+flowchart TD
+    subgraph Phase 0
+        P0_1["Clean Arch Setup"] --> P0_2["Domain Contracts"]
+        P0_2 --> P0_3["Port Interfaces"]
+        P0_3 --> P0_4["Adapters Setup"]
+        P0_4 --> P0_5["FastAPI & DI Setup"]
+        P0_5 --> P0_6["Invariant Tests"]
+        P0_3 --> P0_7["Event-Sourced Audit Trail"]
+        P0_7 --> P0_6
+    end
 
-    SPH1 --> INK2["INK-2: SOCRATES"]
-    SPH1 --> SPH2["SPH-2: TTS"]
-    SPH1 --> SPH3["SPH-3: Indian Langs"]
-    SPH1 --> SPH4["SPH-4: Streaming"]
-    SPH1 --> UIK2["UIK-2: Voice UI"]
+    subgraph Phase 1
+        P0_5 --> P1_1["Intake Engine & SOCRATES"]
+        P0_5 --> P1_2["Dashavidha Pariksha"]
+        P0_5 --> P1_3["OCR & Medical Coding"]
+        P1_1 --> P1_4["Clinical Timeline Builder"]
+        P1_3 --> P1_4
+        P1_1 --> P1_5["Triage Engine"]
+        P0_5 --> P1_6["Consent Engine"]
+        P1_1 --> P1_7["Proxy/Attendant Handling"]
+        P1_1 --> P1_8["CFI & Human Fallback"]
+        P1_8 --> P1_5
+    end
 
-    INK1 --> INK3["INK-3: General History"]
-    INK2 --> INK3
-    INK3 --> INK4["INK-4: Dashavidha 1-4"]
-    INK4 --> INK5["INK-5: Dashavidha 5-10"]
-    INK2 --> INK6["INK-6: Triage"]
-    INK3 --> INK7["INK-7: Multi-lang"]
-    INK3 --> INK8["INK-8: Persistence"]
+    subgraph Phase 2
+        P1_4 --> P2_1["Bilingual Synthesis"]
+        P1_4 --> P2_2["FHIR R4 Bundle"]
+        P2_2 --> P2_3["ABDM Integration"]
+        P0_5 --> P2_4["Frontend Update"]
+        P0_5 --> P2_5["Auth & Monitoring"]
+        P2_2 --> P2_6["Medico-Legal Transcript Hash"]
+        P1_1 --> P2_7["Acoustic Biomarkers Pipeline"]
+        %% P2_7 enriches P1_5 (Triage Engine) but is not a blocking dependency
+    end
 
-    OCR1 --> OCR2["OCR-2: Handwriting"]
-    OCR1 --> OCR3["OCR-3: Lab Reports"]
-    OCR1 --> OCR4["OCR-4: Discharge"]
-    OCR1 --> OCR6["OCR-6: Doc Classify"]
-    OCR2 --> OCR5["OCR-5: Multilingual"]
-    OCR1 --> UIK3["UIK-3: Document Upload"]
-
-    OCR2 --> EXT1["EXT-1: Medications"]
-    OCR3 --> EXT2["EXT-2: Diagnoses"]
-    OCR3 --> EXT3["EXT-3: Lab Values"]
-    OCR4 --> EXT4["EXT-4: Procedures"]
-    EXT1 --> EXT5["EXT-5: Ayurvedic"]
-    EXT1 --> EXT6["EXT-6: Timeline"]
-    EXT2 --> EXT6
-    EXT3 --> EXT6
-
-    INK3 --> SYN1["SYN-1: Summary Engine"]
-    EXT6 --> SYN1
-    SYN1 --> SYN2["SYN-2: Bilingual"]
-    SYN1 --> SYN3["SYN-3: SNOMED Coding"]
-    SYN1 --> SYN4["SYN-4: Ayurvedic Section"]
-    INK5 --> SYN4
-
-    CMP2 --> CMP3["CMP-3: Retention"]
-    CMP2 --> CMP4["CMP-4: Audit Chain"]
-    CMP2 --> CMP6["CMP-6: Auto-terminate"]
-    CMP2 --> CMP7["CMP-7: Anonymization"]
-
-    CMP5 --> INT1["INT-1: ABHA Lookup"]
-    SYN1 --> INT2["INT-2: FHIR Bundle"]
-    INT2 --> INT3["INT-3: Patient/Encounter"]
-    INT2 --> INT4["INT-4: Observation/DiagReport"]
-    EXT3 --> INT4
-    INT2 --> INT5["INT-5: HIS Push"]
-    CMP5 --> INT5
-    INT1 --> INT6["INT-6: Record Pull"]
-
-    SYN1 --> UIK5["UIK-5: Summary Review"]
-    UIK1 --> UIK4["UIK-4: Progress"]
-    UIK1 --> UIK6["UIK-6: Accessibility"]
-    UIK1 --> UIK7["UIK-7: Idle Screen"]
-    UIK1 --> UIK8["UIK-8: Multi-lang UI"]
-    CMP6 --> UIK7
-
-    SPH3 --> SPH5["SPH-5: Noise Robust"]
-    SPH3 --> SPH6["SPH-6: Medical Terms"]
-    SPH3 --> INK7
-
-    SPH2 --> SYN2
+    subgraph Phase 3
+        P2_1 --> P3_1["Evaluation Harness"]
+        P2_5 --> P3_2["Perf Benchmarks"]
+        P2_5 --> P3_3["Security Audit"]
+        P1_1 --> P3_4["Multi-language ASR"]
+        P3_2 --> P3_5["CI/CD Setup"]
+        P3_1 --> P3_6["Documentation"]
+        P0_7 --> P3_7["Walk-Away Privacy Failsafe"]
+        P3_7 --> P3_8["Fleet Telemetry IoT"]
+    end
 ```
 
-## What does not change
+## Task Domain Mapping
 
-- **core/ stays pure.** No I/O, no network, no hardware imports. Enforced by CI.
-- **Consent before any data egress.** The consent chokepoint is architectural, not procedural.
-- **FHIR R4 for all clinical data exchange.** No custom wire formats cross the ABDM boundary.
-- **Contracts frozen between phase gates.** Widening needs an ADR.
-- **One owner per task.** Two agents on the same file means one reviews the other.
-- **eval/ measures everything.** A criterion without a metric has not been addressed.
-- **Bilingual parity.** Patient-facing output always has both Hindi and English.
-- **No PHI in logs.** Ever.
+| Task Domain | Task Name | Phase |
+|---|---|---|
+| Architecture | Clean Architecture Migration | 0 |
+| Domain | Domain Contracts & Interfaces | 0 |
+| Infrastructure | Adapters & Database Schema | 0 |
+| **Audit** | **Event-Sourced Medico-Legal Audit Trail** | **0** |
+| Clinical Logic | Intake Engine (SOCRATES, Dashavidha) | 1 |
+| Document Processing | OCR & Entity Extraction | 1 |
+| Clinical Logic | Clinical Timeline & Triage | 1 |
+| Privacy | Consent Engine | 1 |
+| **Clinical Logic** | **Proxy/Attendant Handling** | **1** |
+| **Resilience** | **Conversation Frustration Index & Human Fallback** | **1** |
+| Synthesis | Bilingual Summary & FHIR | 2 |
+| Integration | ABDM & Frontend Update | 2 |
+| DevOps | Auth, Rate Limiting, CI/CD | 2, 3 |
+| **AI / Signal** | **Acoustic Biomarkers Pipeline** | **2** |
+| **Compliance** | **Medico-Legal Transcript Hash** | **2** |
+| AI / ML | Evaluation Harness, ASR | 3 |
+| Quality | Performance, Security, Docs | 3 |
+| **Hardware** | **Walk-Away Privacy Failsafe** | **3** |
+| **Operations** | **Fleet Telemetry (IoT)** | **3** |
+| **Security** | **CI/CD Security Pipeline (7 gates)** | **0** |
+| **Process** | **Three-Layer AI SDLC (Write→Review→CI)** | **0** |
+| **Security** | **Zero-Trust Kiosk Hardening (TPM, mTLS, USB lockdown)** | **3** |
+| **Security** | **Penetration Testing & Threat Validation** | **3** |
+
+---
+
+## Phase X: Hospital Front-Door OS (From Architecture Backlog)
+
+> **Vision:** Transform MediKiosk from an acute triage engine into a full-scale
+> **Hospital Front-Door Operating System** — benchmarked against Narayana Health,
+> Apollo 24|7, Manipal Hospitals, and Max Healthcare.
+>
+> **When to start:** After Phase 3 is production-stable. Full specifications for
+> every item — including exact contract fields, port signatures, adapter paths,
+> and AuditEvent types — are in [`docs/ARCHITECTURE_BACKLOG.md`](ARCHITECTURE_BACKLOG.md).
+
+### P0 — Must-Have for Hospital Launch
+
+#### X.12 — Medical Safety Guardrail *(INVARIANT)*
+Deterministic Veto Engine bypass: if `TriagePriority.CRITICAL`, ALL commercial flows
+(doctor selection, packages, billing, queue) are skipped. Direct ER alarm + wheelchair
+dispatch. Enforced by invariant test. **No new contracts — uses existing triage + billing types.**
+
+#### X.6 — Doctor Discovery & Transparent Pricing *(Narayana Health)*
+Searchable doctor directory filtered by department, language, seniority. Shows degrees,
+experience, ratings, transparent fee breakdown, PM-JAY badges, chamber room, live
+availability status. Follow-up eligibility auto-detected via phone/UHID lookup.
+- New contract: `DoctorProfile`, `DoctorSeniorityTier`, `DoctorAvailabilityStatus`
+- New port: `ports/doctor.py` (`DoctorRepository`)
+- API: `GET /api/doctors`, `POST /api/intake/select-doctor`
+
+#### X.8 — Touchless Kiosk Payments (BharatQR / UPI)
+Dynamic 3-minute UPI QR code for exact fee. Webhook verification. Cash counter fallback
+with barcode slip. Emergency patients bypass all billing.
+- New contracts: `ConsultationBill`, `PaymentTransaction`, `PaymentStatus`, `BillingType`
+- New port: `ports/payment.py` (`PaymentGatewayPort`)
+- Adapters: Razorpay, mock
+
+### P1 — High Priority
+
+#### X.4 — PM-JAY / Insurance Eligibility *(Manipal/Max)*
+Instant PM-JAY Golden Card verification via NHA API. Cashless tagging. TPA insurance
+card OCR via existing OCRService.
+- New contracts: `BillingEligibility`, `InsuranceScheme`, `EligibilityStatus`
+- New port: `ports/insurance.py` (`InsurancePort`)
+
+#### X.9 — Queue Tokens with Acuity Weighting *(Apollo Qwaiting)*
+Structured tokens: `CARD-E-01` (Emergency), `CARD-R-14` (Routine). Acuity-based
+re-sorting. Integrates with signage (X.2) and WhatsApp (X.1).
+- New contract: `QueueToken`, `TokenPriority`
+- Updated port: `ports/queue.py` → `QueueOrchestratorPort`
+
+#### X.1 — Virtual Waiting Room & WhatsApp/SMS Routing *(Waitwhile)*
+ML-predictive wait times, T-10 / T-2 alerts via WhatsApp/SMS. QR-based lobby exit.
+- New contracts: `QueueEntry`, `WaitTimeUpdate`, `WaitingRoomStatus`
+- New ports: `ports/communications.py`, `ports/queue.py`
+
+#### X.7 — Preventive Health Packages *(Apollo 24|7)*
+Symptom-triggered health package suggestions (Cardiac, Ayush, Senior, Fever panels).
+Cross-sell diagnostics at intake. PM-JAY coverage badges.
+- New contracts: `HospitalPackage`, `PackageCategory`
+- New port: `ports/package.py` (`PackageCatalogPort`)
+- API: `GET /api/packages`, `POST /api/intake/select-package`
+
+### P2 — Medium Priority
+
+#### X.2 — Digital Signage & Lobby Display
+WebSocket-driven TV token board. No PHI by contract design.
+- New contract: `DisplayEvent`, `DisplayEventType`
+- New port: `ports/display.py` (`DisplayBroadcaster`)
+
+#### X.5 — Admin Analytics Dashboard *(OPDX)*
+Heatmap/KPI board derived from append-only AuditEvent log. Admin-role-gated API.
+- New contract: `AnalyticsSnapshot`, `MetricPeriod`
+- New port: `ports/analytics.py` (`AnalyticsPort`)
+
+#### X.10 — Indoor Wayfinding & Navigation
+Interactive 2D floor maps. SMS/WhatsApp turn-by-turn directions. Thermal slip with QR.
+- New contract: `WayfindingRoute`
+- New port: `ports/wayfinding.py` (`WayfindingPort`)
+
+#### X.11 — ABHA 1-Click Scan-and-Share *(Manipal/Max)*
+QR code scan with Aarogya Setu / ABHA app auto-fills demographics without typing.
+- Extends existing `ABDMGateway` port with `generate_abha_scan_qr()`, `receive_abha_callback()`
+- New `ConsentPurpose.ABHA_IDENTITY_SHARE`
+
+### P3 — Later
+
+#### X.3 — Telehealth Smart Diversion *(Mediktor)*
+ESI Level 5 patients offered video consultation or pharmacy refill.
+- New contract: `TelehealthSession`, `DiversionType`
+- New port: `ports/telehealth.py` (`TelehealthPort`)
+
+---
+
+### Phase X — Complete Port & Contract Summary
+
+| Port file | Protocol | Features |
+|---|---|---|
+| `ports/doctor.py` | `DoctorRepository` | X.6 |
+| `ports/package.py` | `PackageCatalogPort` | X.7 |
+| `ports/payment.py` | `PaymentGatewayPort` | X.8 |
+| `ports/queue.py` | `QueueOrchestratorPort` | X.1, X.9 |
+| `ports/communications.py` | `CommunicationsPort` | X.1 |
+| `ports/display.py` | `DisplayBroadcaster` | X.2 |
+| `ports/telehealth.py` | `TelehealthPort` | X.3 |
+| `ports/insurance.py` | `InsurancePort` | X.4 |
+| `ports/analytics.py` | `AnalyticsPort` | X.5 |
+| `ports/wayfinding.py` | `WayfindingPort` | X.10 |
+
+| Contract file | New types | Features |
+|---|---|---|
+| `contracts/doctor.py` | `DoctorProfile`, `DoctorSeniorityTier`, `DoctorAvailabilityStatus` | X.6 |
+| `contracts/package.py` | `HospitalPackage`, `PackageCategory` | X.7 |
+| `contracts/billing.py` | `BillingEligibility`, `ConsultationBill`, `PaymentTransaction`, enums | X.4, X.8 |
+| `contracts/queue.py` | `QueueToken`, `QueueEntry`, `WaitTimeUpdate`, `TokenPriority`, `WaitingRoomStatus` | X.1, X.9 |
+| `contracts/display.py` | `DisplayEvent`, `DisplayEventType` | X.2 |
+| `contracts/telehealth.py` | `TelehealthSession`, `DiversionType` | X.3 |
+| `contracts/analytics.py` | `AnalyticsSnapshot`, `MetricPeriod` | X.5 |
+| `contracts/wayfinding.py` | `WayfindingRoute` | X.10 |
+
+> **For AI agents:** Read `docs/ARCHITECTURE_BACKLOG.md` in full before implementing
+> ANY Phase X item. It contains exact field names, types, enum values, security
+> constraints, and the emergency guardrail invariant.

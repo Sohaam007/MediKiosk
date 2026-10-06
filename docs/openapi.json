@@ -1,0 +1,1194 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MediKiosk",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health Check",
+        "description": "Check system health including database connectivity.\n\nPerforms a lightweight ``SELECT 1`` probe against the configured\ndatabase engine. Never raises \u2014 a DB failure is surfaced as\n``\"database\": \"error\"`` in the response body so load balancers can\nstill parse the JSON.\n\nArgs:\n    engine: Async SQLAlchemy engine (injected).\n\nReturns:\n    dict: Health payload with keys ``status``, ``version``,\n          ``database``.",
+        "operationId": "health_check_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intake/start": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Start Session",
+        "description": "Start a new multi-tenant patient intake session.\n\nCreates a ``SessionState`` record and writes an audit event.\nPHI is never included in the response \u2014 only the opaque ``session_id``\nis returned to the caller.\n\nArgs:\n    body: Session configuration supplied by the kiosk.\n    current_user: Authenticated principal (injected).\n    session_svc: Session lifecycle service (injected).\n    intake_svc: Intake processing service (injected).\n\nReturns:\n    StartSessionResponse: Created session metadata.\n\nRaises:\n    HTTPException 403: ConsentRequiredError / ConsentError.\n    HTTPException 422: Domain ValidationError.\n    HTTPException 500: Any other MediKioskError.",
+        "operationId": "start_session_api_intake_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/intake/respond": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Respond",
+        "description": "Process a patient response and return the next question or triage alert.\n\nValidates session existence and liveness via SessionService. Full\nLLM-based question generation is deferred to Wave 6 (IntakeService).\nA placeholder next question is returned for now.\n\nSECURITY: ``body.response_text`` is PHI and MUST NOT be logged.\nOnly ``session_id`` is recorded in structured logs.\n\nArgs:\n    body: Patient response payload.\n    current_user: Authenticated principal (injected).\n    session_svc: Session lifecycle service (injected).\n    intake_svc: The actual IntakeService.\n\nReturns:\n    RespondResponse: Updated progress, any triage alerts, and next question.",
+        "operationId": "respond_api_intake_respond_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespondResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/session/purge": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Purge Session",
+        "description": "Hard-delete a session record (DPDP Right-to-Erasure).\n\nPermanently removes all session data from the store and writes a\ntamper-evident audit event for compliance. This operation is\nirreversible.\n\nAccepted roles: ``Kiosk_Device``, ``Triage_Nurse``.\n\nArgs:\n    body: Purge request with session_id and reason.\n    current_user: Authenticated principal with purge permission (injected).\n    session_svc: Session lifecycle service (injected).\n\nReturns:\n    PurgeResponse: Confirmation that the session was purged.\n\nRaises:\n    HTTPException 404: SessionNotFoundError.\n    HTTPException 500: Any other MediKioskError.",
+        "operationId": "purge_session_api_session_purge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurgeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/clinician/queue": {
+      "get": {
+        "tags": [
+          "clinician"
+        ],
+        "summary": "Get Queue",
+        "description": "Return the current triage queue for a department.",
+        "operationId": "get_queue_api_clinician_queue_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Department to query",
+              "default": "general",
+              "title": "Department Id"
+            },
+            "description": "Department to query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/clinician/queue/live": {
+      "get": {
+        "tags": [
+          "clinician"
+        ],
+        "summary": "Queue Live Stream",
+        "description": "Stream real-time triage queue updates via Server-Sent Events.",
+        "operationId": "queue_live_stream_api_clinician_queue_live_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Department to stream",
+              "default": "general",
+              "title": "Department Id"
+            },
+            "description": "Department to stream"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctors": {
+      "get": {
+        "tags": [
+          "doctors"
+        ],
+        "summary": "List Doctors",
+        "description": "List available doctors.",
+        "operationId": "list_doctors_api_doctors_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by department",
+              "title": "Department"
+            },
+            "description": "Filter by department"
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by language code",
+              "title": "Language"
+            },
+            "description": "Filter by language code"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intake/select-doctor": {
+      "post": {
+        "tags": [
+          "doctors"
+        ],
+        "summary": "Select Doctor",
+        "description": "Select a doctor for a session.",
+        "operationId": "select_doctor_api_intake_select_doctor_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectDoctorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectDoctorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/packages": {
+      "get": {
+        "tags": [
+          "packages"
+        ],
+        "summary": "List Packages",
+        "description": "List available health packages.",
+        "operationId": "list_packages_api_packages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by department",
+              "title": "Department"
+            },
+            "description": "Filter by department"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category",
+              "title": "Category"
+            },
+            "description": "Filter by category"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intake/select-package": {
+      "post": {
+        "tags": [
+          "packages"
+        ],
+        "summary": "Select Package",
+        "description": "Select packages for a session.",
+        "operationId": "select_package_api_intake_select_package_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectPackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectPackageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DoctorListResponse": {
+        "properties": {
+          "doctors": {
+            "items": {
+              "$ref": "#/components/schemas/DoctorResponse"
+            },
+            "type": "array",
+            "title": "Doctors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doctors"
+        ],
+        "title": "DoctorListResponse",
+        "description": "API response for a list of doctors."
+      },
+      "DoctorResponse": {
+        "properties": {
+          "doctor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Doctor Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "degrees": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Degrees"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "sub_speciality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Speciality"
+          },
+          "clinical_interests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Clinical Interests"
+          },
+          "experience_years": {
+            "type": "integer",
+            "title": "Experience Years"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages"
+          },
+          "seniority_tier": {
+            "type": "string",
+            "title": "Seniority Tier"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count"
+          },
+          "consultation_fee_inr": {
+            "type": "number",
+            "title": "Consultation Fee Inr"
+          },
+          "registration_fee_inr": {
+            "type": "number",
+            "title": "Registration Fee Inr"
+          },
+          "followup_free_days": {
+            "type": "integer",
+            "title": "Followup Free Days"
+          },
+          "pmjay_accepted": {
+            "type": "boolean",
+            "title": "Pmjay Accepted"
+          },
+          "tpa_insurers_accepted": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tpa Insurers Accepted"
+          },
+          "chamber_room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chamber Room"
+          },
+          "availability_status": {
+            "type": "string",
+            "title": "Availability Status"
+          },
+          "opd_start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opd Start Time"
+          },
+          "opd_end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opd End Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doctor_id",
+          "full_name",
+          "degrees",
+          "department",
+          "clinical_interests",
+          "experience_years",
+          "languages",
+          "seniority_tier",
+          "review_count",
+          "consultation_fee_inr",
+          "registration_fee_inr",
+          "followup_free_days",
+          "pmjay_accepted",
+          "tpa_insurers_accepted",
+          "availability_status"
+        ],
+        "title": "DoctorResponse",
+        "description": "API response for a single doctor profile."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PackageListResponse": {
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/PackageResponse"
+            },
+            "type": "array",
+            "title": "Packages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "packages"
+        ],
+        "title": "PackageListResponse",
+        "description": "API response for a list of packages."
+      },
+      "PackageResponse": {
+        "properties": {
+          "package_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Package Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "inclusions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Inclusions"
+          },
+          "lab_tests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lab Tests"
+          },
+          "price_inr": {
+            "type": "number",
+            "title": "Price Inr"
+          },
+          "discounted_price_inr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discounted Price Inr"
+          },
+          "pmjay_covered": {
+            "type": "boolean",
+            "title": "Pmjay Covered"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "turnaround_hours": {
+            "type": "integer",
+            "title": "Turnaround Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "package_id",
+          "title",
+          "category",
+          "description",
+          "inclusions",
+          "lab_tests",
+          "price_inr",
+          "pmjay_covered",
+          "department",
+          "turnaround_hours"
+        ],
+        "title": "PackageResponse",
+        "description": "API response for a single hospital package."
+      },
+      "PurgeRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Purge reason: walk_away|user_request",
+            "default": "walk_away"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "PurgeRequest",
+        "description": "Request body for POST /api/session/purge (DPDP hard purge).\n\nAttributes:\n    session_id: Session to hard-delete.\n    reason: Why the purge is being triggered."
+      },
+      "PurgeResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "purged": {
+            "type": "boolean",
+            "title": "Purged"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "purged",
+          "message"
+        ],
+        "title": "PurgeResponse",
+        "description": "Response body for POST /api/session/purge.\n\nAttributes:\n    session_id: Session that was purged.\n    purged: True when the purge succeeded.\n    message: Human-readable confirmation (PHI-free)."
+      },
+      "QueueEntry": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "department_id": {
+            "type": "string",
+            "title": "Department Id"
+          },
+          "triage_priority": {
+            "type": "string",
+            "title": "Triage Priority",
+            "description": "critical|urgent|normal"
+          },
+          "wait_time_seconds": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Wait Time Seconds"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "department_id",
+          "triage_priority",
+          "wait_time_seconds",
+          "status"
+        ],
+        "title": "QueueEntry",
+        "description": "A single entry in the clinician triage queue.\n\nAttributes:\n    session_id: Opaque session reference (no PHI).\n    department_id: Clinical department this entry belongs to.\n    triage_priority: Urgency level: critical|urgent|normal.\n    wait_time_seconds: How long the patient has been waiting.\n    status: Current lifecycle status of the session."
+      },
+      "QueueResponse": {
+        "properties": {
+          "department_id": {
+            "type": "string",
+            "title": "Department Id"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/QueueEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "department_id",
+          "entries",
+          "total_count"
+        ],
+        "title": "QueueResponse",
+        "description": "Response body for GET /api/clinician/queue.\n\nAttributes:\n    department_id: The department whose queue is returned.\n    entries: Ordered list of queue entries (highest priority first).\n    total_count: Total number of active sessions in the queue."
+      },
+      "RespondRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "response_text": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Response Text",
+            "description": "Patient response. PHI \u2014 never log."
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Input confidence score",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "response_text"
+        ],
+        "title": "RespondRequest",
+        "description": "Request body for POST /api/intake/respond.\n\nAttributes:\n    session_id: Existing session to continue.\n    response_text: Patient's answer text. Contains PHI \u2014 never log.\n    confidence: ASR or input confidence score [0.0, 1.0]."
+      },
+      "RespondResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "intake_progress": {
+            "type": "number",
+            "title": "Intake Progress"
+          },
+          "human_fallback_triggered": {
+            "type": "boolean",
+            "title": "Human Fallback Triggered"
+          },
+          "triage_alerts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Triage Alerts"
+          },
+          "next_question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "intake_progress",
+          "human_fallback_triggered",
+          "triage_alerts",
+          "next_question"
+        ],
+        "title": "RespondResponse",
+        "description": "Response body for POST /api/intake/respond.\n\nAttributes:\n    session_id: Session that was updated.\n    intake_progress: Updated completion fraction [0.0, 1.0].\n    human_fallback_triggered: True when CFI has breached its threshold.\n    triage_alerts: List of red-flag alert summaries (PHI-free).\n    next_question: Next question text to display/speak, or None if complete."
+      },
+      "SelectDoctorRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "doctor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Doctor Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "doctor_id"
+        ],
+        "title": "SelectDoctorRequest",
+        "description": "Request to select a doctor for a session."
+      },
+      "SelectDoctorResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "doctor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Doctor Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "doctor_id",
+          "message"
+        ],
+        "title": "SelectDoctorResponse",
+        "description": "Response after selecting a doctor."
+      },
+      "SelectPackageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "package_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Package Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "package_ids"
+        ],
+        "title": "SelectPackageRequest",
+        "description": "Request to select packages for a session."
+      },
+      "SelectPackageResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "package_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Package Ids"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "package_ids",
+          "message"
+        ],
+        "title": "SelectPackageResponse",
+        "description": "Response after selecting packages."
+      },
+      "StartSessionRequest": {
+        "properties": {
+          "patient_language": {
+            "type": "string",
+            "title": "Patient Language",
+            "description": "BCP-47 language code",
+            "default": "en"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id",
+            "description": "Multi-tenant facility identifier",
+            "default": "default"
+          },
+          "department_id": {
+            "type": "string",
+            "title": "Department Id",
+            "description": "Target clinical department",
+            "default": "general"
+          },
+          "informant_type": {
+            "type": "string",
+            "title": "Informant Type",
+            "description": "Who is answering: patient|relative|caregiver",
+            "default": "patient"
+          }
+        },
+        "type": "object",
+        "title": "StartSessionRequest",
+        "description": "Request body for POST /api/intake/start.\n\nAttributes:\n    patient_language: BCP-47 language code for the session.\n    tenant_id: Multi-tenant identifier for the hospital/facility.\n    department_id: Target clinical department.\n    informant_type: Who is physically answering (patient|relative|caregiver)."
+      },
+      "StartSessionResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "intake_progress": {
+            "type": "number",
+            "title": "Intake Progress"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "intake_progress",
+          "message"
+        ],
+        "title": "StartSessionResponse",
+        "description": "Response body for POST /api/intake/start.\n\nAttributes:\n    session_id: Unique identifier for the created session.\n    status: Current session lifecycle status string.\n    intake_progress: Completion fraction [0.0, 1.0].\n    message: Human-readable status message (PHI-free)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
