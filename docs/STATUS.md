@@ -1,5 +1,36 @@
 # STATUS
 
+## Final Milestone: Edge Hardware Lockdown & Production Deployment
+
+**Status:** ✅ Completed & Production Ready.
+
+**Accomplishments:**
+- ✅ **Linux Edge Hardware Launch Script (`scripts/launch_kiosk_linux.sh`)**:
+  - Production bash script launching Chromium/Google Chrome targeting the local Vite production server (`http://localhost:4173`).
+  - Mandatory lockdown flags enforced: `--kiosk`, `--incognito`, `--disable-pinch`, `--overscroll-history-navigation=0`, `--disable-context-menu`.
+  - Crash dialog and translation prompt suppression: `--disable-infobars`, `--no-first-run`, `--noerrdialogs`, `--disable-session-crashed-bubble`, `--disable-translate`.
+  - Power management: screensaver and DPMS power-saving disabled via `xset s off -dpms`.
+  - Cursor hiding daemon: configured with `unclutter -idle 0.5 -root`.
+  - Infinite auto-recovery watchdog loop ensuring instant browser relaunch upon unexpected crashes.
+- ✅ **Systemd High-Availability Service (`scripts/medikiosk-ui.service`)**:
+  - Systemd unit managing the kiosk UI on system startup (`graphical.target`).
+  - Runs under dedicated unprivileged `kiosk` user with sandboxing and automatic restart (`Restart=always`, `RestartSec=3`).
+  - Guaranteed recovery on physical terminal power loss or reboot.
+- ✅ **Comprehensive IT Administrator Deployment Guide (`docs/EDGE_DEPLOYMENT.md`)**:
+  - Full instructions for Linux (Ubuntu/Debian/Raspberry Pi) edge terminals.
+  - Windows 10/11 Assigned Access (Single-App Kiosk Mode) configuration guide.
+  - Android tablet deployment guide covering Screen Pinning, COSU, and Lock Task Mode.
+  - Hospital Kiosk VLAN network isolation and DPDP Act 2023 zero-retention edge security guarantees.
+- ✅ **All 13 Development Waves 100% Complete**:
+  - Pure Clean Architecture domain models and ports.
+  - Multilingual voice intake across 8 Indian languages with Ayush Sahayak AI.
+  - WebCam prescription and report scanner with OCR entity extraction.
+  - Real-time Clinician Console with Live Queue and evaluated risk scoring.
+  - NHA ABDM Scan & Share Gateway integration with live SSE profile sync.
+  - Strict security invariants: zero PHI logging, 30-day DPDP right-to-erasure purge.
+
+---
+
 ## Wave 13 (National Health Authority ABDM Scan & Share Integration)
 
 **Status:** ✅ Completed & Verified by 2 Independent Zero-Trust Logic Verifiers (100% PASS).

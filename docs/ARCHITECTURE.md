@@ -139,8 +139,8 @@ A module is deep when its public API is small but its internal implementation is
 # Good: deep module. One function, complex internals.
 # The caller does not know about LLM prompts, JSON parsing,
 # retry logic, or medical coding tables.
-def extract_entities(ocr_text: str, document_type: DocumentType) -> list[MedicalEntity]:
-    ...
+def extract_entities(ocr_text: str, document_type: DocumentType) -> list[MedicalEntity]: ...
+
 
 # Bad: shallow module. Every internal step is exposed.
 def find_drug_mentions(text: str) -> list[str]: ...
@@ -561,25 +561,25 @@ every interaction.
 
 ```python
 class AuditEventType(str, Enum):
-    SESSION_CREATED     = "session_created"
-    LANGUAGE_SELECTED   = "language_selected"
-    INFORMANT_DECLARED  = "informant_declared"       # proxy/attendant set
-    CONSENT_GRANTED     = "consent_granted"
-    CONSENT_REVOKED     = "consent_revoked"
-    VOICE_CAPTURED      = "voice_captured"            # transcript hash, NOT transcript
-    QUESTION_GENERATED  = "question_generated"        # question text
-    RESPONSE_RECEIVED   = "response_received"         # response hash, NOT response text
-    BUTTON_TAPPED       = "button_tapped"             # UI element identifier
-    DOCUMENT_SCANNED    = "document_scanned"          # scan_id, doc_type
-    TRIAGE_ALERT_FIRED  = "triage_alert_fired"        # alert_id, priority
-    CFI_INCREMENTED     = "cfi_incremented"            # new CFI value + reason
-    HUMAN_FALLBACK      = "human_fallback_triggered"
-    SUMMARY_GENERATED   = "summary_generated"         # summary_id
-    FHIR_BUNDLE_CREATED = "fhir_bundle_created"       # bundle_id, transcript_hash
-    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"       # success/failure
-    SESSION_COMPLETED   = "session_completed"
-    WALK_AWAY_DETECTED  = "walk_away_detected"        # fires at 15s no-presence (the trigger)
-    SESSION_PURGED      = "session_purged"             # fires after purge completes (the effect)
+    SESSION_CREATED = "session_created"
+    LANGUAGE_SELECTED = "language_selected"
+    INFORMANT_DECLARED = "informant_declared"  # proxy/attendant set
+    CONSENT_GRANTED = "consent_granted"
+    CONSENT_REVOKED = "consent_revoked"
+    VOICE_CAPTURED = "voice_captured"  # transcript hash, NOT transcript
+    QUESTION_GENERATED = "question_generated"  # question text
+    RESPONSE_RECEIVED = "response_received"  # response hash, NOT response text
+    BUTTON_TAPPED = "button_tapped"  # UI element identifier
+    DOCUMENT_SCANNED = "document_scanned"  # scan_id, doc_type
+    TRIAGE_ALERT_FIRED = "triage_alert_fired"  # alert_id, priority
+    CFI_INCREMENTED = "cfi_incremented"  # new CFI value + reason
+    HUMAN_FALLBACK = "human_fallback_triggered"
+    SUMMARY_GENERATED = "summary_generated"  # summary_id
+    FHIR_BUNDLE_CREATED = "fhir_bundle_created"  # bundle_id, transcript_hash
+    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"  # success/failure
+    SESSION_COMPLETED = "session_completed"
+    WALK_AWAY_DETECTED = "walk_away_detected"  # fires at 15s no-presence (the trigger)
+    SESSION_PURGED = "session_purged"  # fires after purge completes (the effect)
     # Note: WALK_AWAY_DETECTED and SESSION_PURGED are two sequential events.
     # First the detection fires, then the purge operation runs, then SESSION_PURGED
     # confirms the purge completed. If the purge fails, only WALK_AWAY_DETECTED exists.
