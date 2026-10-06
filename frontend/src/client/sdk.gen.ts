@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { GenerateTokenApiAuthTokenPostData, GenerateTokenApiAuthTokenPostErrors, GenerateTokenApiAuthTokenPostResponses, GetOverviewApiClinicianOverviewGetData, GetOverviewApiClinicianOverviewGetErrors, GetOverviewApiClinicianOverviewGetResponses, GetQueueApiClinicianQueueGetData, GetQueueApiClinicianQueueGetErrors, GetQueueApiClinicianQueueGetResponses, GetSessionDetailApiClinicianSessionSessionIdGetData, GetSessionDetailApiClinicianSessionSessionIdGetErrors, GetSessionDetailApiClinicianSessionSessionIdGetResponses, HealthCheckApiHealthGetData, HealthCheckApiHealthGetResponses, ListDoctorsApiDoctorsGetData, ListDoctorsApiDoctorsGetErrors, ListDoctorsApiDoctorsGetResponses, ListPackagesApiPackagesGetData, ListPackagesApiPackagesGetErrors, ListPackagesApiPackagesGetResponses, ListSessionDocumentsApiDocumentsSessionSessionIdGetData, ListSessionDocumentsApiDocumentsSessionSessionIdGetErrors, ListSessionDocumentsApiDocumentsSessionSessionIdGetResponses, PagePatientApiClinicianQueuePagePatientPostData, PagePatientApiClinicianQueuePagePatientPostErrors, PagePatientApiClinicianQueuePagePatientPostResponses, PurgeSessionApiSessionPurgePostData, PurgeSessionApiSessionPurgePostErrors, PurgeSessionApiSessionPurgePostResponses, QueueLiveStreamApiClinicianQueueLiveGetData, QueueLiveStreamApiClinicianQueueLiveGetErrors, QueueLiveStreamApiClinicianQueueLiveGetResponses, RespondApiIntakeRespondPostData, RespondApiIntakeRespondPostErrors, RespondApiIntakeRespondPostResponses, SelectDoctorApiIntakeSelectDoctorPostData, SelectDoctorApiIntakeSelectDoctorPostErrors, SelectDoctorApiIntakeSelectDoctorPostResponses, SelectPackageApiIntakeSelectPackagePostData, SelectPackageApiIntakeSelectPackagePostErrors, SelectPackageApiIntakeSelectPackagePostResponses, StartSessionApiIntakeStartPostData, StartSessionApiIntakeStartPostErrors, StartSessionApiIntakeStartPostResponses, TranscribeAudioApiSpeechTranscribePostData, TranscribeAudioApiSpeechTranscribePostErrors, TranscribeAudioApiSpeechTranscribePostResponses, UploadDocumentApiDocumentsUploadPostData, UploadDocumentApiDocumentsUploadPostErrors, UploadDocumentApiDocumentsUploadPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostData, VerifyPmjayApiIntakeVerifyPmjayPostErrors, VerifyPmjayApiIntakeVerifyPmjayPostResponses } from './types.gen';
+import type { AbdmEventsBySessionApiAbdmEventsSessionIdGetData, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsQueryApiAbdmEventsGetData, AbdmEventsQueryApiAbdmEventsGetErrors, AbdmEventsQueryApiAbdmEventsGetResponses, AbdmWebhookApiAbdmWebhookPostData, AbdmWebhookApiAbdmWebhookPostErrors, AbdmWebhookApiAbdmWebhookPostResponses, GenerateAbdmQrApiAbdmGenerateQrGetData, GenerateAbdmQrApiAbdmGenerateQrGetErrors, GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateTokenApiAuthTokenPostData, GenerateTokenApiAuthTokenPostErrors, GenerateTokenApiAuthTokenPostResponses, GetOverviewApiClinicianOverviewGetData, GetOverviewApiClinicianOverviewGetErrors, GetOverviewApiClinicianOverviewGetResponses, GetQueueApiClinicianQueueGetData, GetQueueApiClinicianQueueGetErrors, GetQueueApiClinicianQueueGetResponses, GetSessionDetailApiClinicianSessionSessionIdGetData, GetSessionDetailApiClinicianSessionSessionIdGetErrors, GetSessionDetailApiClinicianSessionSessionIdGetResponses, HealthCheckApiHealthGetData, HealthCheckApiHealthGetResponses, ListDoctorsApiDoctorsGetData, ListDoctorsApiDoctorsGetErrors, ListDoctorsApiDoctorsGetResponses, ListPackagesApiPackagesGetData, ListPackagesApiPackagesGetErrors, ListPackagesApiPackagesGetResponses, ListSessionDocumentsApiDocumentsSessionSessionIdGetData, ListSessionDocumentsApiDocumentsSessionSessionIdGetErrors, ListSessionDocumentsApiDocumentsSessionSessionIdGetResponses, PagePatientApiClinicianQueuePagePatientPostData, PagePatientApiClinicianQueuePagePatientPostErrors, PagePatientApiClinicianQueuePagePatientPostResponses, PurgeSessionApiSessionPurgePostData, PurgeSessionApiSessionPurgePostErrors, PurgeSessionApiSessionPurgePostResponses, QueueLiveStreamApiClinicianQueueLiveGetData, QueueLiveStreamApiClinicianQueueLiveGetErrors, QueueLiveStreamApiClinicianQueueLiveGetResponses, RespondApiIntakeRespondPostData, RespondApiIntakeRespondPostErrors, RespondApiIntakeRespondPostResponses, SelectDoctorApiIntakeSelectDoctorPostData, SelectDoctorApiIntakeSelectDoctorPostErrors, SelectDoctorApiIntakeSelectDoctorPostResponses, SelectPackageApiIntakeSelectPackagePostData, SelectPackageApiIntakeSelectPackagePostErrors, SelectPackageApiIntakeSelectPackagePostResponses, StartSessionApiIntakeStartPostData, StartSessionApiIntakeStartPostErrors, StartSessionApiIntakeStartPostResponses, TranscribeAudioApiSpeechTranscribePostData, TranscribeAudioApiSpeechTranscribePostErrors, TranscribeAudioApiSpeechTranscribePostResponses, UploadDocumentApiDocumentsUploadPostData, UploadDocumentApiDocumentsUploadPostErrors, UploadDocumentApiDocumentsUploadPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostData, VerifyPmjayApiIntakeVerifyPmjayPostErrors, VerifyPmjayApiIntakeVerifyPmjayPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -317,6 +317,47 @@ export const transcribeAudioApiSpeechTranscribePost = <ThrowOnError extends bool
     ...options,
     headers: {
         'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Generate Abdm Qr
+ *
+ * Generate dynamic ABDM Scan & Share QR code payload and counter token.
+ *
+ * Returns the formatted NHA ABDM JSON structure containing HIP ID, counter ID,
+ * and a time-limited transaction token.
+ */
+export const generateAbdmQrApiAbdmGenerateQrGet = <ThrowOnError extends boolean = false>(options?: Options<GenerateAbdmQrApiAbdmGenerateQrGetData, ThrowOnError>): RequestResult<GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateAbdmQrApiAbdmGenerateQrGetErrors, ThrowOnError> => (options?.client ?? client).get<GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateAbdmQrApiAbdmGenerateQrGetErrors, ThrowOnError>({ url: '/api/abdm/generate-qr', ...options });
+
+/**
+ * Abdm Events By Session
+ *
+ * Stream Server-Sent Events (SSE) for ABDM profile sharing linked to a session.
+ */
+export const abdmEventsBySessionApiAbdmEventsSessionIdGet = <ThrowOnError extends boolean = false>(options: Options<AbdmEventsBySessionApiAbdmEventsSessionIdGetData, ThrowOnError>): RequestResult<AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, ThrowOnError> => (options.client ?? client).get<AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, ThrowOnError>({ url: '/api/abdm/events/{session_id}', ...options });
+
+/**
+ * Abdm Events Query
+ *
+ * Stream Server-Sent Events (SSE) using query parameters.
+ */
+export const abdmEventsQueryApiAbdmEventsGet = <ThrowOnError extends boolean = false>(options: Options<AbdmEventsQueryApiAbdmEventsGetData, ThrowOnError>): RequestResult<AbdmEventsQueryApiAbdmEventsGetResponses, AbdmEventsQueryApiAbdmEventsGetErrors, ThrowOnError> => (options.client ?? client).get<AbdmEventsQueryApiAbdmEventsGetResponses, AbdmEventsQueryApiAbdmEventsGetErrors, ThrowOnError>({ url: '/api/abdm/events', ...options });
+
+/**
+ * Abdm Webhook
+ *
+ * Ingest demographic profile payload from ABDM Gateway / ABHA app.
+ *
+ * When triggered, updates the active session state (recording DPDP consent)
+ * and broadcasts an SSE event to the kiosk client.
+ */
+export const abdmWebhookApiAbdmWebhookPost = <ThrowOnError extends boolean = false>(options: Options<AbdmWebhookApiAbdmWebhookPostData, ThrowOnError>): RequestResult<AbdmWebhookApiAbdmWebhookPostResponses, AbdmWebhookApiAbdmWebhookPostErrors, ThrowOnError> => (options.client ?? client).post<AbdmWebhookApiAbdmWebhookPostResponses, AbdmWebhookApiAbdmWebhookPostErrors, ThrowOnError>({
+    url: '/api/abdm/webhook',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
         ...options.headers
     }
 });

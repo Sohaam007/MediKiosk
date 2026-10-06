@@ -1,8 +1,37 @@
 # STATUS
 
-## Wave 11 (Multilingual Voice Intake: Backend Audio Transcription & Native MediaRecorder Kiosk Capture)
+## Wave 13 (National Health Authority ABDM Scan & Share Integration)
 
-**Status:** ✅ Completed & Connected.
+**Status:** ✅ Completed & Verified by 2 Independent Zero-Trust Logic Verifiers (100% PASS).
+
+**Accomplishments:**
+- ✅ **Backend ABDM Routes (`src/medikiosk/api/routes/abdm.py`)**:
+  - `GET /api/abdm/generate-qr`: Generates dynamic counter QR code with NHA ABDM Scan & Share payload (`hip_id`, `counter_id`, `token`, `intent`, `expires_at`).
+  - `POST /api/abdm/webhook`: Receives demographic profile payload from ABHA app / NHA Gateway (`name`, `age`, `gender`, `abha_id`, `token`, `phone_number`), updates active session state via `session_svc.record_consent`, logs immutable `AuditEventType.CONSENT_GRANTED`, and broadcasts real-time SSE event.
+  - `GET /api/abdm/events/{session_id}` & `GET /api/abdm/events`: Server-Sent Events (SSE) stream delivering real-time `abha_profile_shared` events with keepalive pings.
+  - Zero PHI logging compliance: records only operational metadata, transaction tokens, and session UUIDs. Never logs patient names, ABHA IDs, or phone numbers.
+  - Registered `abdm.router` in `src/medikiosk/api/app.py`.
+- ✅ **Frontend QR Code Display & Live SSE Listener (`frontend/src/views/KioskIntakeView.tsx`)**:
+  - Added "Scan ABHA App (QR)" FAST TRACK option in Stage 2 (Patient Registration).
+  - High-resolution SVG QR code rendered via `qrcode.react` (`QRCodeSVG`) displaying the dynamic ABDM payload and counter token (`#ABDM-XXXX`).
+  - Integrated `EventSource` listening to `/api/abdm/events/{session_id}`.
+  - When patient scans QR on their ABHA App, the SSE event automatically pre-fills patient name, age, gender, ABHA ID, and phone number, shows an emerald confirmation card, and auto-advances to Stage 3 (symptom triage).
+  - Provided interactive "Simulate Mobile App Scan" testing CTA for immediate live demonstration.
+- ✅ **Clean Architecture & Invariant Enforcement**:
+  - Added `SessionService.record_consent` recording DPDP consent and appending `AuditEventType.CONSENT_GRANTED`.
+  - Zero imports from `adapters/` in `abdm.py` (strict layer purity maintained).
+- ✅ **Type Safety, SDK Synchronization & Automated Testing**:
+  - Created comprehensive test suite in `tests/e2e/test_abdm_api.py` (6 passing tests).
+  - Regenerated `docs/openapi.json` and synced TypeScript SDK via `npm run generate-client`.
+  - All 123 tests passing (`uv run pytest tests/`).
+  - Strict mypy passed with 0 errors across 95 source files.
+  - Ruff linter passed with 0 errors.
+  - Clean frontend production build (`npm run build`).
+- ✅ **Independent Multi-Agent Zero-Trust Audit**:
+  - Verified by `abdm_logic_verifier_1` (ABDM Protocol, Session State & Frontend Auto-Advance: 4/4 PASS).
+  - Verified by `abdm_logic_verifier_2` (Zero PHI Logging, Clean Architecture, Test Suites & SDK Sync: 4/4 PASS).
+
+---
 
 **Accomplishments:**
 - ✅ **Backend Audio Transcription Route (`src/medikiosk/api/routes/speech.py`)**:

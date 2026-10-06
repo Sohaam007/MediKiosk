@@ -5,6 +5,150 @@ export type ClientOptions = {
 };
 
 /**
+ * ABDMGenerateQRResponse
+ *
+ * Payload returned for display as an ABDM Scan & Share QR code.
+ */
+export type AbdmGenerateQrResponse = {
+    /**
+     * Token
+     *
+     * Unique counter token assigned to this scan transaction
+     */
+    token: string;
+    /**
+     * Hip Id
+     *
+     * Health Information Provider ID (Hospital NHA ID)
+     */
+    hip_id?: string;
+    /**
+     * Hip Name
+     *
+     * Registered hospital facility name
+     */
+    hip_name?: string;
+    /**
+     * Counter Id
+     *
+     * Physical kiosk counter / terminal code
+     */
+    counter_id?: string;
+    /**
+     * Intent
+     *
+     * ABDM Scan and Share intent
+     */
+    intent?: string;
+    /**
+     * Qr Code Data
+     *
+     * Serialized JSON payload string for QR code generation
+     */
+    qr_code_data: string;
+    /**
+     * Expires At
+     *
+     * ISO UTC timestamp when QR code expires
+     */
+    expires_at: string;
+    /**
+     * Session Id
+     *
+     * Active session UUID if linked
+     */
+    session_id?: string | null;
+};
+
+/**
+ * ABDMWebhookPayload
+ *
+ * Demographic profile payload sent by the ABDM Gateway / ABHA app upon scan.
+ */
+export type AbdmWebhookPayload = {
+    /**
+     * Token
+     *
+     * Counter / transaction token from scanned QR code
+     */
+    token: string;
+    /**
+     * Session Id
+     *
+     * Optional active session UUID
+     */
+    session_id?: string | null;
+    /**
+     * Name
+     *
+     * Patient full name from ABHA profile
+     */
+    name: string;
+    /**
+     * Age
+     *
+     * Patient age in years
+     */
+    age?: number;
+    /**
+     * Gender
+     *
+     * Patient gender (Male, Female, Other)
+     */
+    gender?: string;
+    /**
+     * Abha Id
+     *
+     * 14-digit ABHA number or ABHA address
+     */
+    abha_id: string;
+    /**
+     * Phone Number
+     *
+     * Registered mobile number
+     */
+    phone_number?: string | null;
+    /**
+     * Encrypted Payload
+     *
+     * Optional encrypted demographic block
+     */
+    encrypted_payload?: string | null;
+};
+
+/**
+ * ABDMWebhookResponse
+ *
+ * Response returned to ABDM Gateway acknowledging profile ingestion.
+ */
+export type AbdmWebhookResponse = {
+    /**
+     * Status
+     *
+     * Acknowledgement status
+     */
+    status?: string;
+    /**
+     * Message
+     *
+     * Status message
+     */
+    message?: string;
+    /**
+     * Token
+     *
+     * Transaction token
+     */
+    token: string;
+    /**
+     * Session Id
+     *
+     * Linked session ID
+     */
+    session_id?: string | null;
+};
+
+/**
  * Body_transcribe_audio_api_speech_transcribe_post
  */
 export type BodyTranscribeAudioApiSpeechTranscribePost = {
@@ -1446,3 +1590,149 @@ export type TranscribeAudioApiSpeechTranscribePostResponses = {
 };
 
 export type TranscribeAudioApiSpeechTranscribePostResponse = TranscribeAudioApiSpeechTranscribePostResponses[keyof TranscribeAudioApiSpeechTranscribePostResponses];
+
+export type GenerateAbdmQrApiAbdmGenerateQrGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Session Id
+         *
+         * Active intake session identifier
+         */
+        session_id?: string | null;
+        /**
+         * Kiosk Id
+         *
+         * Physical kiosk identifier
+         */
+        kiosk_id?: string;
+    };
+    url: '/api/abdm/generate-qr';
+};
+
+export type GenerateAbdmQrApiAbdmGenerateQrGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GenerateAbdmQrApiAbdmGenerateQrGetError = GenerateAbdmQrApiAbdmGenerateQrGetErrors[keyof GenerateAbdmQrApiAbdmGenerateQrGetErrors];
+
+export type GenerateAbdmQrApiAbdmGenerateQrGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AbdmGenerateQrResponse;
+};
+
+export type GenerateAbdmQrApiAbdmGenerateQrGetResponse = GenerateAbdmQrApiAbdmGenerateQrGetResponses[keyof GenerateAbdmQrApiAbdmGenerateQrGetResponses];
+
+export type AbdmEventsBySessionApiAbdmEventsSessionIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: {
+        /**
+         * Token
+         *
+         * Optional counter token to also subscribe to
+         */
+        token?: string | null;
+        /**
+         * Max Events
+         *
+         * Optional limit on events before stream close
+         */
+        max_events?: number | null;
+    };
+    url: '/api/abdm/events/{session_id}';
+};
+
+export type AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AbdmEventsBySessionApiAbdmEventsSessionIdGetError = AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors[keyof AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors];
+
+export type AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type AbdmEventsQueryApiAbdmEventsGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Session Id
+         *
+         * Active session ID to stream
+         */
+        session_id: string;
+        /**
+         * Token
+         *
+         * Optional counter token
+         */
+        token?: string | null;
+        /**
+         * Max Events
+         *
+         * Optional limit on events before stream close
+         */
+        max_events?: number | null;
+    };
+    url: '/api/abdm/events';
+};
+
+export type AbdmEventsQueryApiAbdmEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AbdmEventsQueryApiAbdmEventsGetError = AbdmEventsQueryApiAbdmEventsGetErrors[keyof AbdmEventsQueryApiAbdmEventsGetErrors];
+
+export type AbdmEventsQueryApiAbdmEventsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type AbdmWebhookApiAbdmWebhookPostData = {
+    body: AbdmWebhookPayload;
+    path?: never;
+    query?: never;
+    url: '/api/abdm/webhook';
+};
+
+export type AbdmWebhookApiAbdmWebhookPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AbdmWebhookApiAbdmWebhookPostError = AbdmWebhookApiAbdmWebhookPostErrors[keyof AbdmWebhookApiAbdmWebhookPostErrors];
+
+export type AbdmWebhookApiAbdmWebhookPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AbdmWebhookResponse;
+};
+
+export type AbdmWebhookApiAbdmWebhookPostResponse = AbdmWebhookApiAbdmWebhookPostResponses[keyof AbdmWebhookApiAbdmWebhookPostResponses];

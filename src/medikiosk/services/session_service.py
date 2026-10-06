@@ -277,6 +277,55 @@ class SessionService:
         )
         return updated
 
+    async def record_consent(
+        self,
+        session_id: uuid.UUID,
+        *,
+        source: str = "ABDM_SCAN_AND_SHARE",
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Record DPDP consent granted for the session.
+
+        Args:
+            session_id: UUID of the session.
+            source: Channel through which consent was authorized.
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState with consent_status=True.
+        """
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updated = session.model_copy(
+            update={
+                "consent_status": True,
+                "intake_progress": max(session.intake_progress, 0.2),
+            }
+        )
+        await self._session_repo.update(updated)
+
+        seq = await self._next_seq(session_id)
+        timestamp = now or datetime.now(UTC)
+        await self._audit_repo.append(
+            AuditEvent(
+                event_id=uuid.uuid4(),
+                session_id=session_id,
+                event_type=AuditEventType.CONSENT_GRANTED,
+                timestamp=timestamp,
+                sequence_number=seq,
+                payload={"source": source},
+            )
+        )
+
+        log.info(
+            "session_consent_recorded",
+            session_id=str(session_id),
+            source=source,
+        )
+        return updated
+
     async def record_patient_paged(
         self,
         session_id: uuid.UUID,

@@ -1165,10 +1165,458 @@
           }
         }
       }
+    },
+    "/api/abdm/generate-qr": {
+      "get": {
+        "tags": [
+          "abdm"
+        ],
+        "summary": "Generate Abdm Qr",
+        "description": "Generate dynamic ABDM Scan & Share QR code payload and counter token.\n\nReturns the formatted NHA ABDM JSON structure containing HIP ID, counter ID,\nand a time-limited transaction token.",
+        "operationId": "generate_abdm_qr_api_abdm_generate_qr_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Active intake session identifier",
+              "title": "Session Id"
+            },
+            "description": "Active intake session identifier"
+          },
+          {
+            "name": "kiosk_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Physical kiosk identifier",
+              "default": "KIOSK-01",
+              "title": "Kiosk Id"
+            },
+            "description": "Physical kiosk identifier"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ABDMGenerateQRResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abdm/events/{session_id}": {
+      "get": {
+        "tags": [
+          "abdm"
+        ],
+        "summary": "Abdm Events By Session",
+        "description": "Stream Server-Sent Events (SSE) for ABDM profile sharing linked to a session.",
+        "operationId": "abdm_events_by_session_api_abdm_events__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional counter token to also subscribe to",
+              "title": "Token"
+            },
+            "description": "Optional counter token to also subscribe to"
+          },
+          {
+            "name": "max_events",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional limit on events before stream close",
+              "title": "Max Events"
+            },
+            "description": "Optional limit on events before stream close"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abdm/events": {
+      "get": {
+        "tags": [
+          "abdm"
+        ],
+        "summary": "Abdm Events Query",
+        "description": "Stream Server-Sent Events (SSE) using query parameters.",
+        "operationId": "abdm_events_query_api_abdm_events_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Active session ID to stream",
+              "title": "Session Id"
+            },
+            "description": "Active session ID to stream"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional counter token",
+              "title": "Token"
+            },
+            "description": "Optional counter token"
+          },
+          {
+            "name": "max_events",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional limit on events before stream close",
+              "title": "Max Events"
+            },
+            "description": "Optional limit on events before stream close"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abdm/webhook": {
+      "post": {
+        "tags": [
+          "abdm"
+        ],
+        "summary": "Abdm Webhook",
+        "description": "Ingest demographic profile payload from ABDM Gateway / ABHA app.\n\nWhen triggered, updates the active session state (recording DPDP consent)\nand broadcasts an SSE event to the kiosk client.",
+        "operationId": "abdm_webhook_api_abdm_webhook_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ABDMWebhookPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ABDMWebhookResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ABDMGenerateQRResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Unique counter token assigned to this scan transaction"
+          },
+          "hip_id": {
+            "type": "string",
+            "title": "Hip Id",
+            "description": "Health Information Provider ID (Hospital NHA ID)",
+            "default": "IN0810000001"
+          },
+          "hip_name": {
+            "type": "string",
+            "title": "Hip Name",
+            "description": "Registered hospital facility name",
+            "default": "St. Ananya Hospital"
+          },
+          "counter_id": {
+            "type": "string",
+            "title": "Counter Id",
+            "description": "Physical kiosk counter / terminal code",
+            "default": "KIOSK-01"
+          },
+          "intent": {
+            "type": "string",
+            "title": "Intent",
+            "description": "ABDM Scan and Share intent",
+            "default": "ABHA_SCAN_AND_SHARE"
+          },
+          "qr_code_data": {
+            "type": "string",
+            "title": "Qr Code Data",
+            "description": "Serialized JSON payload string for QR code generation"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At",
+            "description": "ISO UTC timestamp when QR code expires"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Active session UUID if linked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "qr_code_data",
+          "expires_at"
+        ],
+        "title": "ABDMGenerateQRResponse",
+        "description": "Payload returned for display as an ABDM Scan & Share QR code."
+      },
+      "ABDMWebhookPayload": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token",
+            "description": "Counter / transaction token from scanned QR code"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Optional active session UUID"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "description": "Patient full name from ABHA profile"
+          },
+          "age": {
+            "type": "integer",
+            "maximum": 125.0,
+            "minimum": 0.0,
+            "title": "Age",
+            "description": "Patient age in years",
+            "default": 30
+          },
+          "gender": {
+            "type": "string",
+            "title": "Gender",
+            "description": "Patient gender (Male, Female, Other)",
+            "default": "Male"
+          },
+          "abha_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Abha Id",
+            "description": "14-digit ABHA number or ABHA address"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number",
+            "description": "Registered mobile number"
+          },
+          "encrypted_payload": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encrypted Payload",
+            "description": "Optional encrypted demographic block"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "name",
+          "abha_id"
+        ],
+        "title": "ABDMWebhookPayload",
+        "description": "Demographic profile payload sent by the ABDM Gateway / ABHA app upon scan."
+      },
+      "ABDMWebhookResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Acknowledgement status",
+            "default": "ACK"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message",
+            "default": "Demographic profile received and broadcast"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Transaction token"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Linked session ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "ABDMWebhookResponse",
+        "description": "Response returned to ABDM Gateway acknowledging profile ingestion."
+      },
       "Body_transcribe_audio_api_speech_transcribe_post": {
         "properties": {
           "file": {
