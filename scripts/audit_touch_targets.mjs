@@ -11,7 +11,12 @@ const filesToAudit = [
   'frontend/src/views/ClinicianQueueView.tsx',
   'frontend/src/views/KioskIntakeView.tsx',
   'frontend/src/components/LanguageSelector.tsx',
-  'frontend/src/components/EmergencyAlertModal.tsx'
+  'frontend/src/components/EmergencyAlertModal.tsx',
+  'frontend/src/components/DocumentScanner.tsx',
+  'frontend/src/components/AyushSahayakAvatar.tsx',
+  'frontend/src/components/KioskStepperHeader.tsx',
+  'frontend/src/components/NanoBanner.tsx',
+  'frontend/src/components/ErrorBoundary.tsx'
 ];
 
 console.log('=== SYSTEMATIC AUDIT OF TOUCH TARGETS (48x48px) ===\n');
@@ -20,17 +25,17 @@ console.log('=== SYSTEMATIC AUDIT OF TOUCH TARGETS (48x48px) ===\n');
 function checkTouchTargetClasses(className) {
   if (!className) return { heightOk: false, widthOk: false, reason: 'No className' };
 
-  const tokens = className.split(/\s+/);
+  const tokens = className.split(/\s+/).filter(Boolean);
 
   // Height check:
   // min-h-[48px], min-h-[72px], min-h-[80px], min-h-[96px], min-h-12, min-h-14, min-h-16, h-12, h-14, h-16, h-[48px]...
   const heightOk = tokens.some(t => {
-    if (/^min-h-(\[?(\d+)px\]?|12|14|16|20|24)/.test(t)) {
+    if (/^min-h-(\[(\d+)px\]|12|14|16|20|24|28|32)/.test(t)) {
       const match = t.match(/min-h-\[(\d+)px\]/);
       if (match) return parseInt(match[1], 10) >= 48;
       return true;
     }
-    if (/^h-(\[?(\d+)px\]?|12|14|16|20|24)/.test(t)) {
+    if (/^h-(\[(\d+)px\]|12|14|16|20|24|28|32)/.test(t)) {
       const match = t.match(/h-\[(\d+)px\]/);
       if (match) return parseInt(match[1], 10) >= 48;
       return true;
@@ -40,15 +45,13 @@ function checkTouchTargetClasses(className) {
 
   // Width check:
   // min-w-[48px], min-w-12, w-full, w-1/2, w-1/3, w-2/3, w-14, w-16, px-4, px-5, px-6, px-8, etc.
-  // Note: if an element has px-4 (32px padding) + text/content, it is wider than 48px.
-  // Or if it has w-full / w-1/2 / flex-1 / min-w-[...].
   const widthOk = tokens.some(t => {
-    if (/^min-w-(\[?(\d+)px\]?|12|14|16|20|24)/.test(t)) {
+    if (/^min-w-(\[(\d+)px\]|12|14|16|20|24|28|32)/.test(t)) {
       const match = t.match(/min-w-\[(\d+)px\]/);
       if (match) return parseInt(match[1], 10) >= 48;
       return true;
     }
-    if (/^w-(full|1\/2|1\/3|2\/3|3\/4|(\[?(\d+)px\]?)|12|14|16|20)/.test(t)) {
+    if (/^w-(full|1\/2|1\/3|2\/3|3\/4|\[(\d+)px\]|12|14|16|20|24|28|32)/.test(t)) {
       const match = t.match(/w-\[(\d+)px\]/);
       if (match) return parseInt(match[1], 10) >= 48;
       return true;
@@ -59,6 +62,221 @@ function checkTouchTargetClasses(className) {
   });
 
   return { heightOk, widthOk, tokens };
+}
+
+/**
+ * Accurately parses opening JSX tags by handling quotes and nested braces.
+ */
+function extractOpeningTags(content) {
+  const tags = [];
+  let i = 0;
+  const n = content.length;
+
+  while (i < n) {
+    if (content[i] === '<') {
+      const nextChar = content[i + 1];
+      // Only proceed if next character is a letter (valid JSX element start)
+      if (nextChar && /[a-zA-Z]/.test(nextChar) && content.substring(i, i + 4) !== '<!--') {
+        const tagStartIndex = i;
+        i++;
+        let tagName = '';
+        while (i < n && /[a-zA-Z0-9_]/.test(content[i])) {
+          tagName += content[i];
+          i++;
+        }
+
+        let attrStart = i;
+        let braceDepth = 0;
+        let inSingle = false;
+        let inDouble = false;
+        let inTemplate = false;
+        let isEscaped = false;
+
+        while (i < n) {
+          const char = content[i];
+
+          if (isEscaped) {
+            isEscaped = false;
+            i++;
+            continue;
+          }
+
+          if (char === '\\') {
+            isEscaped = true;
+            i++;
+            continue;
+          }
+
+          if (inSingle) {
+            if (char === "'") inSingle = false;
+            i++;
+            continue;
+          }
+          if (inDouble) {
+            if (char === '"') inDouble = false;
+            i++;
+            continue;
+          }
+          if (inTemplate) {
+            if (char === '`') inTemplate = false;
+            i++;
+            continue;
+          }
+
+          if (char === "'") {
+            inSingle = true;
+            i++;
+            continue;
+          }
+          if (char === '"') {
+            inDouble = true;
+            i++;
+            continue;
+          }
+          if (char === '`') {
+            inTemplate = true;
+            i++;
+            continue;
+          }
+
+          if (char === '{') {
+            braceDepth++;
+            i++;
+            continue;
+          }
+          if (char === '}') {
+            if (braceDepth > 0) braceDepth--;
+            i++;
+            continue;
+          }
+
+          // Found end of opening tag outside of braces and strings
+          if (braceDepth === 0 && char === '>') {
+            const rawAttributes = content.substring(attrStart, i);
+            tags.push({
+              tagName,
+              attributes: rawAttributes,
+              index: tagStartIndex
+            });
+            i++;
+            break;
+          }
+
+          i++;
+        }
+        continue;
+      }
+    }
+    i++;
+  }
+
+  return tags;
+}
+
+/**
+ * Extracts all class tokens from attributes string
+ */
+function extractClassNameExpr(attributes) {
+  const cnIndex = attributes.indexOf('className=');
+  if (cnIndex === -1) return null;
+  const afterEqual = attributes.substring(cnIndex + 'className='.length).trimStart();
+  if (afterEqual.startsWith('"')) {
+    const end = afterEqual.indexOf('"', 1);
+    return { type: 'string', content: afterEqual.substring(1, end !== -1 ? end : afterEqual.length) };
+  }
+  if (afterEqual.startsWith("'")) {
+    const end = afterEqual.indexOf("'", 1);
+    return { type: 'string', content: afterEqual.substring(1, end !== -1 ? end : afterEqual.length) };
+  }
+  if (afterEqual.startsWith('{')) {
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    let inTemplate = false;
+    let esc = false;
+    for (let i = 0; i < afterEqual.length; i++) {
+      const c = afterEqual[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (inSingle) { if (c === "'") inSingle = false; continue; }
+      if (inDouble) { if (c === '"') inDouble = false; continue; }
+      if (inTemplate) { if (c === '`') inTemplate = false; continue; }
+      if (c === "'") { inSingle = true; continue; }
+      if (c === '"') { inDouble = true; continue; }
+      if (c === '`') { inTemplate = true; continue; }
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          return { type: 'expr', content: afterEqual.substring(1, i).trim() };
+        }
+      }
+    }
+    return { type: 'expr', content: afterEqual.substring(1).trim() };
+  }
+  return null;
+}
+
+function extractAllClassTokens(attributes) {
+  const classTokens = new Set();
+  const parsed = extractClassNameExpr(attributes);
+  if (!parsed) return '';
+
+  if (parsed.type === 'string') {
+    parsed.content.split(/\s+/).forEach(t => t && classTokens.add(t));
+  } else if (parsed.type === 'expr') {
+    const expr = parsed.content;
+    if (expr.startsWith('`') && expr.endsWith('`')) {
+      const templateContent = expr.slice(1, -1);
+      let depth = 0;
+      let staticStr = '';
+      const dynamicStrings = [];
+      let currentDyn = '';
+
+      for (let i = 0; i < templateContent.length; i++) {
+        if (templateContent[i] === '$' && templateContent[i + 1] === '{') {
+          depth++;
+          i++; // skip {
+          continue;
+        }
+        if (depth > 0) {
+          if (templateContent[i] === '{') {
+            depth++;
+          } else if (templateContent[i] === '}') {
+            depth--;
+            if (depth === 0) {
+              dynamicStrings.push(currentDyn);
+              currentDyn = '';
+              continue;
+            }
+          }
+          currentDyn += templateContent[i];
+        } else {
+          staticStr += templateContent[i];
+        }
+      }
+
+      staticStr.split(/\s+/).forEach(t => t && classTokens.add(t));
+
+      for (const dyn of dynamicStrings) {
+        const matches = dyn.match(/(['"`])(.*?)\1/g);
+        if (matches) {
+          for (const m of matches) {
+            m.slice(1, -1).split(/\s+/).forEach(t => t && classTokens.add(t));
+          }
+        }
+      }
+    } else {
+      const matches = expr.match(/(['"`])(.*?)\1/g);
+      if (matches) {
+        for (const m of matches) {
+          m.slice(1, -1).split(/\s+/).forEach(t => t && classTokens.add(t));
+        }
+      }
+    }
+  }
+
+  return Array.from(classTokens).join(' ');
 }
 
 let totalInteractive = 0;
@@ -73,38 +291,38 @@ for (const filePath of filesToAudit) {
   }
 
   const content = fs.readFileSync(fullPath, 'utf8');
-  const lines = content.split('\n');
 
   console.log(`\n--- Inspecting ${filePath} ---`);
 
-  // Simple regex parser for interactive JSX tags: button, input, select, textarea, role="button", role="radio"
-  // Scan line by line or tag by tag
-  const tagRegex = /<([a-zA-Z0-9]+)([^>]*?)(?:>|\/>)/gs;
-  let match;
+  const tags = extractOpeningTags(content);
 
-  while ((match = tagRegex.exec(content)) !== null) {
-    const tagName = match[1];
-    const attributes = match[2];
+  for (const item of tags) {
+    const { tagName, attributes, index } = item;
+
+    // Check if hidden or non-visual input
+    const isHiddenInput = tagName === 'input' && (
+      attributes.includes('type="hidden"') ||
+      attributes.includes("type='hidden'") ||
+      /\bclassName=(?:["'][^"']*\bhidden\b|`[^`]*\bhidden\b)/.test(attributes)
+    );
+
+    if (isHiddenInput) {
+      continue;
+    }
 
     const isInteractiveTag = ['button', 'input', 'select', 'textarea'].includes(tagName);
     const hasInteractiveRole = /role=["'](button|radio|checkbox|tab|link)["']/.test(attributes);
-    const hasOnClick = /onClick=\{/.test(attributes) && (tagName === 'div' || tagName === 'span');
+    const hasOnClick = /onClick=\{/.test(attributes) && (tagName === 'div' || tagName === 'span' || tagName === 'a');
 
     if (isInteractiveTag || hasInteractiveRole || hasOnClick) {
       totalInteractive++;
 
       // Find line number
-      const lineNum = content.substring(0, match.index).split('\n').length;
-
-      // Extract className
-      const classMatch = attributes.match(/className=(?:\{`([^`]+)`\}|"([^"]+)"|'([^']+)')/s);
-      const rawClass = classMatch ? (classMatch[1] || classMatch[2] || classMatch[3] || '') : '';
-      // Clean up template literal interpolations
-      const cleanedClass = rawClass.replace(/\$\{[^}]+\}/g, ' ');
+      const lineNum = content.substring(0, index).split('\n').length;
+      const cleanedClass = extractAllClassTokens(attributes);
 
       const { heightOk, widthOk } = checkTouchTargetClasses(cleanedClass);
 
-      // Check if both height and width satisfy >= 48px
       if (heightOk && widthOk) {
         compliantInteractive++;
       } else {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -867,14 +867,32 @@ export function ClinicianQueueView() {
     };
   }, []);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Synchronize newly intaken kiosk patients from localStorage and cross-component custom events
   useEffect(() => {
     const syncLocalQueue = () => {
       try {
+        if (typeof window === 'undefined' || !window.localStorage) return;
         const stored = localStorage.getItem('medikiosk_live_patient_queue');
         if (stored) {
-          const localPatients: EnrichedQueueItem[] = JSON.parse(stored);
-          if (Array.isArray(localPatients) && localPatients.length > 0) {
+          let localPatients: EnrichedQueueItem[] = [];
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+              localPatients = parsed.filter((p) => p && typeof p === 'object' && p.session_id);
+            }
+          } catch {
+            localPatients = [];
+          }
+
+          if (localPatients.length > 0 && isMountedRef.current) {
             setQueueData((prev) => {
               const localIds = new Set(localPatients.map((p) => p.session_id));
               const remainingPrev = prev.filter((p) => !localIds.has(p.session_id));
@@ -915,7 +933,7 @@ export function ClinicianQueueView() {
     setSelectedSession(patient);
     try {
       const sessionRes = await fetch(`/api/clinician/session/${patient.session_id}`);
-      if (sessionRes.ok) {
+      if (sessionRes.ok && isMountedRef.current) {
         await sessionRes.json();
       }
     } catch {
@@ -927,8 +945,9 @@ export function ClinicianQueueView() {
   const handlePagePatientWhatsApp = async (patient: EnrichedQueueItem) => {
     setPagingSessionId(patient.session_id);
 
+    let isApiSuccess = false;
     try {
-      await fetch('/api/clinician/queue/page-patient', {
+      const res = await fetch('/api/clinician/queue/page-patient', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -937,10 +956,12 @@ export function ClinicianQueueView() {
           turns_ahead: 0,
         }),
       });
+      isApiSuccess = res.ok;
     } catch {
-      // Mock fallback
+      isApiSuccess = false;
     }
 
+    if (!isMountedRef.current) return;
     setPagingSessionId(null);
 
     // Update patient status in queue
@@ -955,13 +976,23 @@ export function ClinicianQueueView() {
     }
 
     // Display visual toast notification
-    setToastMessage({
-      id: getNextToastId(),
-      type: 'success',
-      title: 'Patient Paged via WhatsApp',
-      detail: `WhatsApp broadcast dispatched to ${patient.patient_name || 'Patient'} (${patient.phone_number || '+91 98765 43210'}). Prompted to proceed to ${patient.chamber_room || 'Room 104'}.`,
-    });
+    if (isApiSuccess) {
+      setToastMessage({
+        id: getNextToastId(),
+        type: 'success',
+        title: 'Patient Paged via WhatsApp',
+        detail: `WhatsApp broadcast dispatched to ${patient.patient_name || 'Patient'} (${patient.phone_number || '+91 98765 43210'}). Prompted to proceed to ${patient.chamber_room || 'Room 104'}.`,
+      });
+    } else {
+      setToastMessage({
+        id: getNextToastId(),
+        type: 'warning',
+        title: 'Patient Paged (Offline Mode)',
+        detail: `Backend dispatch pending. WhatsApp alert for ${patient.patient_name || 'Patient'} recorded locally.`,
+      });
+    }
   };
+
 
   // Action: Call into Room 104
   const handleCallIntoRoom = (patient: EnrichedQueueItem) => {
@@ -1101,6 +1132,7 @@ export function ClinicianQueueView() {
   const handlePingIntegration = async (integrationId: string) => {
     setPingingIntegrationId(integrationId);
     await new Promise((resolve) => setTimeout(resolve, 600));
+    if (!isMountedRef.current) return;
     const randomLatency = Math.floor(Math.random() * 25) + 30;
 
     setIntegrationsData((prev) =>
@@ -1208,10 +1240,12 @@ export function ClinicianQueueView() {
             </p>
           </div>
           <button
+            type="button"
             onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Dismiss notification"
+            className="min-h-[48px] min-w-[48px] flex items-center justify-center text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
       )}
@@ -1243,8 +1277,9 @@ export function ClinicianQueueView() {
           {/* Navigation Pills */}
           <nav className="space-y-1.5">
             <button
+              type="button"
               onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full min-h-[48px] min-w-[48px] flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'overview'
                   ? 'bg-[#0A1F33] text-white shadow-md border-l-4 border-[#2563EB]'
                   : 'text-blue-100/80 hover:bg-[#0A1F33]/60 hover:text-white'
@@ -1254,8 +1289,9 @@ export function ClinicianQueueView() {
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('live_intake')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full min-h-[48px] min-w-[48px] flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'live_intake'
                   ? 'bg-[#0A1F33] text-white shadow-md border-l-4 border-[#2563EB]'
                   : 'text-blue-100/80 hover:bg-[#0A1F33]/60 hover:text-white'
@@ -1270,8 +1306,9 @@ export function ClinicianQueueView() {
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('documents')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full min-h-[48px] min-w-[48px] flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'documents'
                   ? 'bg-[#0A1F33] text-white shadow-md border-l-4 border-[#2563EB]'
                   : 'text-blue-100/80 hover:bg-[#0A1F33]/60 hover:text-white'
@@ -1286,8 +1323,9 @@ export function ClinicianQueueView() {
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('patient_profiles')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full min-h-[48px] min-w-[48px] flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'patient_profiles'
                   ? 'bg-[#0A1F33] text-white shadow-md border-l-4 border-[#2563EB]'
                   : 'text-blue-100/80 hover:bg-[#0A1F33]/60 hover:text-white'
@@ -1297,8 +1335,9 @@ export function ClinicianQueueView() {
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('integrations')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full min-h-[48px] min-w-[48px] flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'integrations'
                   ? 'bg-[#0A1F33] text-white shadow-md border-l-4 border-[#2563EB]'
                   : 'text-blue-100/80 hover:bg-[#0A1F33]/60 hover:text-white'
@@ -1402,13 +1441,14 @@ export function ClinicianQueueView() {
 
             {/* Requirement 2: Review now button calls handleSelectPatient(queueData[0]) and sets tab to overview */}
             <button
+              type="button"
               onClick={() => {
                 if (queueData.length > 0) {
                   handleSelectPatient(queueData[0]);
                 }
                 setActiveTab('overview');
               }}
-              className="bg-red-600 hover:bg-red-700 text-white min-h-[44px] px-6 py-2.5 rounded-xl text-sm font-bold shadow-md hover:shadow-lg flex items-center gap-2 transition-all transform active:scale-95 shrink-0"
+              className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-white min-h-[48px] min-w-[48px] px-6 py-2.5 rounded-xl text-sm font-bold shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 shrink-0"
             >
               Review now <ArrowRight className="w-4 h-4" />
             </button>
@@ -1489,8 +1529,9 @@ export function ClinicianQueueView() {
                     </span>
                   </h3>
                   <button
+                    type="button"
                     onClick={() => setActiveTab('live_intake')}
-                    className="text-xs font-bold text-[#2563EB] hover:text-[#1E3A8A] hover:underline flex items-center gap-1"
+                    className="min-h-[48px] min-w-[48px] px-3 py-2 rounded-xl text-xs font-bold text-[#2563EB] hover:text-[#1E3A8A] hover:bg-blue-50/80 flex items-center justify-center gap-1 transition"
                   >
                     Manage queue <ArrowRight className="w-3.5 h-3.5" />
                   </button>
@@ -1502,8 +1543,10 @@ export function ClinicianQueueView() {
                     return (
                       <div
                         key={item.session_id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleSelectPatient(item)}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                        className={`min-h-[48px] min-w-[48px] w-full p-4 rounded-xl border cursor-pointer transition-all ${
                           isSelected
                             ? 'border-[#2563EB] bg-blue-50/60 shadow-md ring-2 ring-[#2563EB]/40'
                             : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -1615,9 +1658,10 @@ export function ClinicianQueueView() {
                       <div className="flex items-center gap-2">
                         {/* Requirement 2: Working Page Patient via WhatsApp Button */}
                         <button
+                          type="button"
                           onClick={() => handlePagePatientWhatsApp(selectedSession)}
                           disabled={pagingSessionId === selectedSession.session_id}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all transform active:scale-95 disabled:opacity-50"
+                          className="min-h-[48px] min-w-[48px] bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all transform active:scale-95 disabled:opacity-50"
                         >
                           <Send className="w-3.5 h-3.5" />
                           <span>
@@ -1628,8 +1672,9 @@ export function ClinicianQueueView() {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleCallIntoRoom(selectedSession)}
-                          className="bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-colors"
+                          className="min-h-[48px] min-w-[48px] bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-colors"
                         >
                           <PhoneCall className="w-3.5 h-3.5" />
                           <span>Call Room 104</span>
@@ -1920,20 +1965,22 @@ export function ClinicianQueueView() {
 
                   {/* Search Input */}
                   <div className="relative w-full md:w-80">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-4" />
                     <input
                       type="text"
                       placeholder="Search patient, token, complaint..."
                       value={intakeSearchQuery}
                       onChange={(e) => setIntakeSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all"
+                      className="w-full min-h-[48px] pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all"
                     />
                     {intakeSearchQuery && (
                       <button
+                        type="button"
                         onClick={() => setIntakeSearchQuery('')}
-                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                        aria-label="Clear search"
+                        className="absolute right-1 top-0 bottom-0 min-h-[48px] min-w-[48px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-4 h-4" />
                       </button>
                     )}
                   </div>
@@ -1953,8 +2000,9 @@ export function ClinicianQueueView() {
                     return (
                       <button
                         key={filterVal}
+                        type="button"
                         onClick={() => setPriorityFilter(filterVal)}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all capitalize flex items-center gap-1.5 ${
+                        className={`min-h-[48px] min-w-[48px] text-xs font-bold px-4 py-2 rounded-xl transition-all capitalize flex items-center justify-center gap-1.5 ${
                           isActive
                             ? 'bg-[#0F2E4A] text-white shadow-sm ring-1 ring-[#1E3A8A]'
                             : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
@@ -2070,10 +2118,11 @@ export function ClinicianQueueView() {
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Requirement 2 & 3: Working Page button */}
                             <button
+                              type="button"
                               title="Page Patient via WhatsApp"
                               onClick={() => handlePagePatientWhatsApp(item)}
                               disabled={pagingSessionId === item.session_id}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                              className="min-h-[48px] min-w-[48px] px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
                             >
                               <Send className="w-3.5 h-3.5" />
                               <span className="hidden xl:inline">Page</span>
@@ -2081,9 +2130,10 @@ export function ClinicianQueueView() {
 
                             {/* Requirement 3: Working Call into Room 104 button */}
                             <button
+                              type="button"
                               title="Call into Room 104"
                               onClick={() => handleCallIntoRoom(item)}
-                              className="bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white p-2 rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1"
+                              className="min-h-[48px] min-w-[48px] px-3.5 py-2.5 bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1.5"
                             >
                               <PhoneCall className="w-3.5 h-3.5" />
                               <span className="hidden xl:inline">Call In</span>
@@ -2091,9 +2141,10 @@ export function ClinicianQueueView() {
 
                             {/* Requirement 3: Working Mark Attended button */}
                             <button
+                              type="button"
                               title="Mark as Attended"
                               onClick={() => handleMarkAttended(item)}
-                              className="bg-slate-800 hover:bg-slate-900 text-white p-2 rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1"
+                              className="min-h-[48px] min-w-[48px] px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1.5"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span className="hidden xl:inline">Attended</span>
@@ -2129,13 +2180,13 @@ export function ClinicianQueueView() {
                 </div>
 
                 <div className="relative w-full md:w-80">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-4" />
                   <input
                     type="text"
                     placeholder="Search patient, medication, formulation..."
                     value={docSearchQuery}
                     onChange={(e) => setDocSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    className="w-full min-h-[48px] pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   />
                 </div>
               </div>
@@ -2210,8 +2261,9 @@ export function ClinicianQueueView() {
                             <div className="flex items-center justify-end gap-2">
                               {/* Requirement 3: View Document preview modal button */}
                               <button
+                                type="button"
                                 onClick={() => setActivePreviewDoc(doc)}
-                                className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-200"
+                                className="min-h-[48px] min-w-[48px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-slate-200"
                               >
                                 <Eye className="w-3.5 h-3.5 text-slate-600" />
                                 <span>View Document</span>
@@ -2219,8 +2271,9 @@ export function ClinicianQueueView() {
 
                               {/* Requirement 3: Download FHIR JSON button */}
                               <button
+                                type="button"
                                 onClick={() => handleDownloadFHIRJSON(doc)}
-                                className="bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                                className="min-h-[48px] min-w-[48px] bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                               >
                                 <Download className="w-3.5 h-3.5" />
                                 <span>Download FHIR JSON</span>
@@ -2258,8 +2311,10 @@ export function ClinicianQueueView() {
                       </div>
 
                       <button
+                        type="button"
                         onClick={() => setActivePreviewDoc(null)}
-                        className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+                        aria-label="Close document preview"
+                        className="min-h-[48px] min-w-[48px] flex items-center justify-center p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -2338,17 +2393,19 @@ export function ClinicianQueueView() {
                       </span>
                       <div className="flex items-center gap-3">
                         <button
+                          type="button"
                           onClick={() => setActivePreviewDoc(null)}
-                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+                          className="min-h-[48px] min-w-[48px] px-5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors flex items-center justify-center"
                         >
                           Close
                         </button>
                         <button
+                          type="button"
                           onClick={() => {
                             handleDownloadFHIRJSON(activePreviewDoc);
                             setActivePreviewDoc(null);
                           }}
-                          className="bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-colors"
+                          className="min-h-[48px] min-w-[48px] bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
                           <span>Download FHIR JSON</span>
@@ -2380,13 +2437,13 @@ export function ClinicianQueueView() {
                   </div>
 
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-4" />
                     <input
                       type="text"
                       placeholder="Search by name, ABHA, phone..."
                       value={profileSearchQuery}
                       onChange={(e) => setProfileSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                      className="w-full min-h-[48px] pl-10 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                     />
                   </div>
                 </div>
@@ -2397,8 +2454,10 @@ export function ClinicianQueueView() {
                     return (
                       <div
                         key={prof.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedProfileId(prof.id)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        className={`min-h-[48px] min-w-[48px] w-full p-3.5 rounded-xl border cursor-pointer transition-all ${
                           isSelected
                             ? 'border-[#2563EB] bg-blue-50/70 shadow-md ring-2 ring-[#2563EB]/40'
                             : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -2611,11 +2670,12 @@ export function ClinicianQueueView() {
                           placeholder="e.g. ECG normal sinus rhythm. Commenced sublingual nitrate; vitals stable..."
                           value={newClinicalNote}
                           onChange={(e) => setNewClinicalNote(e.target.value)}
-                          className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                          className="flex-1 min-h-[48px] bg-white border border-slate-300 rounded-xl px-4 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                         />
                         <button
+                          type="button"
                           onClick={() => handleSaveClinicalNote(activeSelectedProfile.name)}
-                          className="bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shrink-0"
+                          className="min-h-[48px] min-w-[48px] bg-[#1E3A8A] hover:bg-[#0F2E4A] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors shrink-0 flex items-center justify-center"
                         >
                           Append Note
                         </button>
@@ -2687,9 +2747,11 @@ export function ClinicianQueueView() {
 
                           {/* Interactive Toggle Switch */}
                           <button
+                            type="button"
                             onClick={() => handleToggleIntegration(integration.id)}
                             title={isOperational ? 'Pause integration' : 'Resume integration'}
-                            className="p-1 rounded-lg text-slate-600 hover:text-slate-900 transition-colors"
+                            aria-label={isOperational ? 'Pause integration' : 'Resume integration'}
+                            className="min-h-[48px] min-w-[48px] flex items-center justify-center p-2 rounded-xl text-slate-600 hover:text-slate-900 transition-colors"
                           >
                             {isOperational ? (
                               <ToggleRight className="w-8 h-8 text-emerald-600" />
@@ -2740,12 +2802,13 @@ export function ClinicianQueueView() {
                         </div>
 
                         <button
+                          type="button"
                           onClick={() => handlePingIntegration(integration.id)}
                           disabled={isPinging}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                          className="min-h-[48px] min-w-[48px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
                         >
                           <RefreshCw
-                            className={`w-3 h-3 text-slate-500 ${isPinging ? 'animate-spin' : ''}`}
+                            className={`w-3.5 h-3.5 text-slate-500 ${isPinging ? 'animate-spin' : ''}`}
                           />
                           <span>{isPinging ? 'Pinging...' : 'Test Ping'}</span>
                         </button>
