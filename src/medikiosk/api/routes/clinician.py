@@ -143,21 +143,24 @@ async def _queue_event_generator(
     cache: CachePort | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield SSE-formatted events for the real-time queue stream."""
-    # Keep-alive loop that checks state periodically
-    while True:
-        try:
-            queue_resp = await _fetch_queue_response(department_id, session_svc, cache=cache)
-            state: dict[str, object] = {
-                "type": "queue_state",
-                "department_id": department_id,
-                "entries": [e.model_dump(mode="json") for e in queue_resp.entries],
-                "total_count": queue_resp.total_count,
-            }
-            yield f"data: {json.dumps(state)}\n\n"
-        except (SQLAlchemyError, MediKioskError) as e:
-            log.error("sse_queue_fetch_failed", error=str(e))
+    try:
+        while True:
+            try:
+                queue_resp = await _fetch_queue_response(department_id, session_svc, cache=cache)
+                state: dict[str, object] = {
+                    "type": "queue_state",
+                    "department_id": department_id,
+                    "entries": [e.model_dump(mode="json") for e in queue_resp.entries],
+                    "total_count": queue_resp.total_count,
+                }
+                yield f"data: {json.dumps(state)}\n\n"
+            except (SQLAlchemyError, MediKioskError) as e:
+                log.error("sse_queue_fetch_failed", exc_type=type(e).__name__)
 
-        await asyncio.sleep(10)
+            await asyncio.sleep(10)
+    except (asyncio.CancelledError, GeneratorExit):
+        log.debug("clinician_sse_client_disconnected", department_id=department_id)
+        raise
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -299,7 +302,9 @@ async def get_session_detail(
             timeline_events = intake_data.get("timeline_events", [])
     except Exception as exc:
         log.warning(
-            "clinician_session_detail_cache_lookup_failed", session_id=session_id, error=str(exc)
+            "clinician_session_detail_cache_lookup_failed",
+            session_id=session_id,
+            exc_type=type(exc).__name__,
         )
 
     return ClinicianSessionDetailResponse(

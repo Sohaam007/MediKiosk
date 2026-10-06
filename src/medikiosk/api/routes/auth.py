@@ -14,7 +14,7 @@ from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from medikiosk.api.dependencies.auth import ALLOWED_ROLES
 from medikiosk.api.dependencies.container import get_settings_dep
@@ -25,8 +25,16 @@ router = APIRouter(tags=["auth"])
 
 
 class TokenRequest(BaseModel):
-    client_id: str = Field(description="Client identifier")
+    client_id: str = Field(min_length=1, description="Client identifier")
     role: str = Field(default="Kiosk_Device", description="Role to assume")
+
+    @field_validator("client_id")
+    @classmethod
+    def validate_client_id(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("client_id cannot be blank or whitespace only")
+        return s
 
 
 class TokenResponse(BaseModel):

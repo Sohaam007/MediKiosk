@@ -38,7 +38,8 @@ from medikiosk.api.schemas.intake import (
     StartSessionResponse,
     VerifyPMJAYRequest,
 )
-from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult
+from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult, SessionStatus
+from medikiosk.domain.errors import SessionTerminatedError
 from medikiosk.domain.intake.clinical_questions import (
     generate_next_question,
     get_termination_acknowledgement,
@@ -152,6 +153,8 @@ async def respond(
     """
     # Verify the session exists and is active — raises domain errors on failure
     session = await session_svc.get_session(body.session_id)
+    if session.status == SessionStatus.COMPLETED:
+        raise SessionTerminatedError(f"Session {session.session_id} is already completed.")
 
     log.info("intake_respond_received", session_id=str(body.session_id))
     # NOTE: body.response_text is PHI — NEVER log it.
@@ -188,6 +191,9 @@ async def respond(
             history=previous_responses,
         )
         progress = updated_session.progress
+
+    # Update session progress in the persistent store
+    await session_svc.update_progress(session.session_id, progress)
 
     return RespondResponse(
         session_id=session.session_id,

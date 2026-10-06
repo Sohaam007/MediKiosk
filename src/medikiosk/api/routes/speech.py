@@ -85,17 +85,25 @@ async def transcribe_audio(
             ),
         )
 
-    audio_bytes = await file.read()
+    # Read in chunks up to MAX_AUDIO_SIZE to prevent unbounded memory allocation
+    chunk_size = 1024 * 1024  # 1MB chunks
+    buffer = bytearray()
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > MAX_AUDIO_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="Audio file size exceeds maximum limit (25MB).",
+            )
+
+    audio_bytes = bytes(buffer)
     if len(audio_bytes) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Audio recording file is empty.",
-        )
-
-    if len(audio_bytes) > MAX_AUDIO_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Audio file size exceeds maximum limit (25MB).",
         )
 
     # Log operational telemetry — NEVER log raw audio data or transcripts (PHI protection)

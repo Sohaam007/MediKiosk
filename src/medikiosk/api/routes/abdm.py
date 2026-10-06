@@ -20,11 +20,12 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from medikiosk.api.dependencies.container import get_session_service_dep
+from medikiosk.domain.errors import SessionExpiredError, SessionNotFoundError
 from medikiosk.services.session_service import SessionService
 
 log = structlog.get_logger(__name__)
@@ -34,23 +35,42 @@ router = APIRouter(tags=["abdm"])
 # In-memory pub-sub registry for real-time SSE dispatch
 _SUBSCRIBERS: dict[str, list[asyncio.Queue[dict[str, Any]]]] = {}
 _TOKEN_REGISTRY: dict[str, dict[str, Any]] = {}
+MAX_TOKEN_REGISTRY_SIZE = 5000
+
+
+def _prune_token_registry() -> None:
+    """Evict expired counter tokens from the in-memory registry."""
+    now = datetime.now(UTC)
+    expired_keys = [
+        k for k, v in _TOKEN_REGISTRY.items() if v.get("expires_at") and v["expires_at"] < now
+    ]
+    for k in expired_keys:
+        _TOKEN_REGISTRY.pop(k, None)
+
+    # Evict oldest entries if total registry size exceeds capacity
+    if len(_TOKEN_REGISTRY) > MAX_TOKEN_REGISTRY_SIZE:
+        excess = len(_TOKEN_REGISTRY) - MAX_TOKEN_REGISTRY_SIZE
+        for k in list(_TOKEN_REGISTRY.keys())[:excess]:
+            _TOKEN_REGISTRY.pop(k, None)
 
 
 def _subscribe(key: str, q: asyncio.Queue[dict[str, Any]]) -> None:
-    if not key:
+    clean_key = key.strip() if key else ""
+    if not clean_key:
         return
-    if key not in _SUBSCRIBERS:
-        _SUBSCRIBERS[key] = []
-    _SUBSCRIBERS[key].append(q)
+    if clean_key not in _SUBSCRIBERS:
+        _SUBSCRIBERS[clean_key] = []
+    _SUBSCRIBERS[clean_key].append(q)
 
 
 def _unsubscribe(key: str, q: asyncio.Queue[dict[str, Any]]) -> None:
-    if not key or key not in _SUBSCRIBERS:
+    clean_key = key.strip() if key else ""
+    if not clean_key or clean_key not in _SUBSCRIBERS:
         return
     try:
-        _SUBSCRIBERS[key].remove(q)
-        if not _SUBSCRIBERS[key]:
-            _SUBSCRIBERS.pop(key, None)
+        _SUBSCRIBERS[clean_key].remove(q)
+        if not _SUBSCRIBERS[clean_key]:
+            _SUBSCRIBERS.pop(clean_key, None)
     except ValueError:
         pass
 
@@ -58,12 +78,22 @@ def _unsubscribe(key: str, q: asyncio.Queue[dict[str, Any]]) -> None:
 def _broadcast(keys: list[str], data: dict[str, Any]) -> None:
     seen_queues: set[int] = set()
     for key in keys:
-        if not key or key not in _SUBSCRIBERS:
+        clean_key = key.strip() if key else ""
+        if not clean_key or clean_key not in _SUBSCRIBERS:
             continue
-        for q in _SUBSCRIBERS[key]:
+        for q in list(_SUBSCRIBERS.get(clean_key, [])):
             if id(q) not in seen_queues:
                 seen_queues.add(id(q))
-                q.put_nowait(data)
+                try:
+                    q.put_nowait(data)
+                except asyncio.QueueFull:
+                    log.warning("abdm_sse_queue_full_dropped_event", key=clean_key)
+                except Exception as exc:
+                    log.warning(
+                        "abdm_sse_broadcast_put_failed",
+                        key=clean_key,
+                        exc_type=type(exc).__name__,
+                    )
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -147,6 +177,14 @@ class ABDMWebhookPayload(BaseModel):
         description="Optional encrypted demographic block",
     )
 
+    @field_validator("token", "name", "abha_id")
+    @classmethod
+    def validate_non_blank(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Field cannot be blank or whitespace only")
+        return s
+
 
 class ABDMWebhookResponse(BaseModel):
     """Response returned to ABDM Gateway acknowledging profile ingestion."""
@@ -202,6 +240,8 @@ async def generate_abdm_qr(
     }
     qr_code_data = json.dumps(qr_payload)
 
+    _prune_token_registry()
+
     _TOKEN_REGISTRY[token] = {
         "session_id": session_id,
         "kiosk_id": kiosk_id,
@@ -233,15 +273,19 @@ async def _sse_streamer(
     max_events: int | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield Server-Sent Events for ABDM profile sharing."""
-    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    _subscribe(session_key, queue)
-    if token_key:
-        _subscribe(token_key, queue)
+    clean_session = session_key.strip()
+    clean_token = token_key.strip() if token_key else None
+
+    # Bounded queue (maxsize=100) prevents memory leakage if subscriber is slow or stalled
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
+    _subscribe(clean_session, queue)
+    if clean_token:
+        _subscribe(clean_token, queue)
 
     emitted = 0
     try:
         # Initial connection acknowledgement
-        conn_payload = json.dumps({"status": "connected", "channel": session_key})
+        conn_payload = json.dumps({"status": "connected", "channel": clean_session})
         yield f"event: ping\ndata: {conn_payload}\n\n"
         emitted += 1
         if max_events is not None and emitted >= max_events:
@@ -261,10 +305,19 @@ async def _sse_streamer(
             except TimeoutError:
                 # Keep-alive comment to prevent socket timeout
                 yield ": keepalive\n\n"
+    except (asyncio.CancelledError, GeneratorExit):
+        log.debug("abdm_sse_client_disconnected", session_key=clean_session)
+        raise
     finally:
-        _unsubscribe(session_key, queue)
-        if token_key:
-            _unsubscribe(token_key, queue)
+        _unsubscribe(clean_session, queue)
+        if clean_token:
+            _unsubscribe(clean_token, queue)
+        # Drain remaining events to clear queue object references
+        while not queue.empty():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
 
 @router.get("/api/abdm/events/{session_id}")
@@ -280,9 +333,15 @@ async def abdm_events_by_session(
     ] = None,
 ) -> StreamingResponse:
     """Stream Server-Sent Events (SSE) for ABDM profile sharing linked to a session."""
-    log.info("abdm_sse_connected", session_id=session_id, token=token)
+    clean_session = session_id.strip()
+    if not clean_session:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session ID cannot be blank",
+        )
+    log.info("abdm_sse_connected", session_id=clean_session, token=token)
     return StreamingResponse(
-        _sse_streamer(session_id, token, max_events=max_events),
+        _sse_streamer(clean_session, token, max_events=max_events),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -325,6 +384,8 @@ async def abdm_webhook(
     When triggered, updates the active session state (recording DPDP consent)
     and broadcasts an SSE event to the kiosk client.
     """
+    _prune_token_registry()
+
     # Resolve target session ID
     target_session_id = payload.session_id
     if target_session_id is None:
@@ -338,6 +399,12 @@ async def abdm_webhook(
             await session_svc.record_consent(
                 target_session_id,
                 source="ABDM_SCAN_AND_SHARE",
+            )
+        except (SessionNotFoundError, SessionExpiredError) as exc:
+            log.warning(
+                "abdm_session_not_found_or_expired",
+                session_id=str(target_session_id),
+                reason=type(exc).__name__,
             )
         except Exception as exc:
             log.warning(
@@ -364,7 +431,14 @@ async def abdm_webhook(
     if target_session_id:
         channels_to_notify.append(str(target_session_id))
 
-    _broadcast(channels_to_notify, event_payload)
+    try:
+        _broadcast(channels_to_notify, event_payload)
+    except Exception as exc:
+        log.warning(
+            "abdm_broadcast_failed",
+            token=payload.token,
+            exc_type=type(exc).__name__,
+        )
 
     # Log telemetry WITHOUT PHI
     log.info(

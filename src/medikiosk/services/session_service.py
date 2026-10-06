@@ -326,6 +326,34 @@ class SessionService:
         )
         return updated
 
+    async def update_progress(
+        self,
+        session_id: uuid.UUID,
+        progress: float,
+        *,
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Update intake progress fraction [0.0, 1.0] for the session.
+
+        Args:
+            session_id: UUID of the session.
+            progress: Progress fraction between 0.0 and 1.0.
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState.
+        """
+        clamped_progress = max(0.0, min(1.0, progress))
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updated = session.model_copy(
+            update={"intake_progress": max(session.intake_progress, clamped_progress)}
+        )
+        await self._session_repo.update(updated)
+        return updated
+
     async def record_patient_paged(
         self,
         session_id: uuid.UUID,

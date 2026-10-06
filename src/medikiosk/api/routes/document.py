@@ -72,11 +72,24 @@ async def upload_document(
             detail=f"Invalid document_type. Must be one of {[t.value for t in DocumentType]}",
         ) from err
 
-    file_bytes = await file.read()
-    if len(file_bytes) > MAX_FILE_SIZE:
+    chunk_size = 1024 * 1024
+    buffer = bytearray()
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File size exceeds maximum allowed (10MB)",
+            )
+
+    file_bytes = bytes(buffer)
+    if len(file_bytes) == 0:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File size exceeds maximum allowed (10MB)",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded document file is empty",
         )
 
     scan_id = uuid.uuid4()
