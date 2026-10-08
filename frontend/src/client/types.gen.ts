@@ -191,6 +191,32 @@ export type BodyUploadDocumentApiDocumentsUploadPost = {
 };
 
 /**
+ * ClinicalSummaryResponse
+ *
+ * Bilingual clinical summary response.
+ */
+export type ClinicalSummaryResponse = {
+    /**
+     * Summary Id
+     *
+     * Summary identifier
+     */
+    summary_id: string;
+    /**
+     * Session Id
+     *
+     * Session identifier
+     */
+    session_id: string;
+    /**
+     * Sections
+     *
+     * Bilingual summary sections
+     */
+    sections: Array<SummarySectionResponse>;
+};
+
+/**
  * ClinicianOverviewResponse
  *
  * Dashboard KPIs and red flags.
@@ -415,6 +441,96 @@ export type DocumentScan = {
  * Category of scanned medical document.
  */
 export type DocumentType = 'prescription' | 'lab_report' | 'discharge_summary' | 'referral' | 'other';
+
+/**
+ * FHIRBundleResponse
+ *
+ * FHIR R4 Bundle response.
+ */
+export type FhirBundleResponse = {
+    /**
+     * Bundle Id
+     *
+     * FHIR Bundle identifier
+     */
+    bundle_id: string;
+    /**
+     * Session Id
+     *
+     * Session identifier
+     */
+    session_id: string;
+    /**
+     * Bundle Json
+     *
+     * FHIR R4 resource JSON
+     */
+    bundle_json: {
+        [key: string]: unknown;
+    };
+    /**
+     * Resource Count
+     *
+     * Number of entries in bundle
+     */
+    resource_count?: number;
+    /**
+     * Validation Passed
+     *
+     * Schema validation status
+     */
+    validation_passed?: boolean;
+    /**
+     * Transcript Hash
+     *
+     * Cryptographic SHA-256 transcript hash
+     */
+    transcript_hash: string;
+    /**
+     * Generated At
+     *
+     * ISO 8601 generation timestamp
+     */
+    generated_at: string;
+};
+
+/**
+ * GenerateSummaryRequest
+ *
+ * Request to generate bilingual summary and FHIR bundle for a session.
+ */
+export type GenerateSummaryRequest = {
+    /**
+     * Session Id
+     *
+     * Target session UUID
+     */
+    session_id: string;
+};
+
+/**
+ * GenerateSummaryResponse
+ *
+ * Combined summary generation response.
+ */
+export type GenerateSummaryResponse = {
+    /**
+     * Clinical summary
+     */
+    summary: ClinicalSummaryResponse;
+    /**
+     * Bundle Id
+     *
+     * Generated FHIR bundle identifier
+     */
+    bundle_id: string;
+    /**
+     * Transcript Hash
+     *
+     * SHA-256 source transcript hash
+     */
+    transcript_hash: string;
+};
 
 /**
  * HTTPValidationError
@@ -879,6 +995,44 @@ export type StartSessionResponse = {
      * Message
      */
     message: string;
+};
+
+/**
+ * SummarySectionResponse
+ *
+ * Section of a clinical summary.
+ */
+export type SummarySectionResponse = {
+    /**
+     * Title
+     *
+     * Section title (e.g. Chief Complaint)
+     */
+    title: string;
+    /**
+     * Content En
+     *
+     * English content
+     */
+    content_en: string;
+    /**
+     * Content Local
+     *
+     * Local language content
+     */
+    content_local: string;
+    /**
+     * Clinical Domain
+     *
+     * Clinical domain identifier
+     */
+    clinical_domain: string;
+    /**
+     * Source Entities
+     *
+     * Source entities
+     */
+    source_entities?: Array<string>;
 };
 
 /**
@@ -1736,3 +1890,109 @@ export type AbdmWebhookApiAbdmWebhookPostResponses = {
 };
 
 export type AbdmWebhookApiAbdmWebhookPostResponse = AbdmWebhookApiAbdmWebhookPostResponses[keyof AbdmWebhookApiAbdmWebhookPostResponses];
+
+export type GenerateSummaryApiSummaryGeneratePostData = {
+    body: GenerateSummaryRequest;
+    path?: never;
+    query?: {
+        /**
+         * Token
+         *
+         * JWT token for SSE/WebSocket clients
+         */
+        token?: string | null;
+    };
+    url: '/api/summary/generate';
+};
+
+export type GenerateSummaryApiSummaryGeneratePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GenerateSummaryApiSummaryGeneratePostError = GenerateSummaryApiSummaryGeneratePostErrors[keyof GenerateSummaryApiSummaryGeneratePostErrors];
+
+export type GenerateSummaryApiSummaryGeneratePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GenerateSummaryResponse;
+};
+
+export type GenerateSummaryApiSummaryGeneratePostResponse = GenerateSummaryApiSummaryGeneratePostResponses[keyof GenerateSummaryApiSummaryGeneratePostResponses];
+
+export type GetSummaryBySessionApiSummarySessionSessionIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: {
+        /**
+         * Token
+         *
+         * JWT token for SSE/WebSocket clients
+         */
+        token?: string | null;
+    };
+    url: '/api/summary/session/{session_id}';
+};
+
+export type GetSummaryBySessionApiSummarySessionSessionIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSummaryBySessionApiSummarySessionSessionIdGetError = GetSummaryBySessionApiSummarySessionSessionIdGetErrors[keyof GetSummaryBySessionApiSummarySessionSessionIdGetErrors];
+
+export type GetSummaryBySessionApiSummarySessionSessionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicalSummaryResponse;
+};
+
+export type GetSummaryBySessionApiSummarySessionSessionIdGetResponse = GetSummaryBySessionApiSummarySessionSessionIdGetResponses[keyof GetSummaryBySessionApiSummarySessionSessionIdGetResponses];
+
+export type GetFhirBundleBySessionApiFhirSessionSessionIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: {
+        /**
+         * Token
+         *
+         * JWT token for SSE/WebSocket clients
+         */
+        token?: string | null;
+    };
+    url: '/api/fhir/session/{session_id}';
+};
+
+export type GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFhirBundleBySessionApiFhirSessionSessionIdGetError = GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors[keyof GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors];
+
+export type GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FhirBundleResponse;
+};
+
+export type GetFhirBundleBySessionApiFhirSessionSessionIdGetResponse = GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses[keyof GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses];

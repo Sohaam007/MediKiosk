@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AbdmEventsBySessionApiAbdmEventsSessionIdGetData, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsQueryApiAbdmEventsGetData, AbdmEventsQueryApiAbdmEventsGetErrors, AbdmEventsQueryApiAbdmEventsGetResponses, AbdmWebhookApiAbdmWebhookPostData, AbdmWebhookApiAbdmWebhookPostErrors, AbdmWebhookApiAbdmWebhookPostResponses, GenerateAbdmQrApiAbdmGenerateQrGetData, GenerateAbdmQrApiAbdmGenerateQrGetErrors, GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateTokenApiAuthTokenPostData, GenerateTokenApiAuthTokenPostErrors, GenerateTokenApiAuthTokenPostResponses, GetOverviewApiClinicianOverviewGetData, GetOverviewApiClinicianOverviewGetErrors, GetOverviewApiClinicianOverviewGetResponses, GetQueueApiClinicianQueueGetData, GetQueueApiClinicianQueueGetErrors, GetQueueApiClinicianQueueGetResponses, GetSessionDetailApiClinicianSessionSessionIdGetData, GetSessionDetailApiClinicianSessionSessionIdGetErrors, GetSessionDetailApiClinicianSessionSessionIdGetResponses, HealthCheckApiHealthGetData, HealthCheckApiHealthGetResponses, ListDoctorsApiDoctorsGetData, ListDoctorsApiDoctorsGetErrors, ListDoctorsApiDoctorsGetResponses, ListPackagesApiPackagesGetData, ListPackagesApiPackagesGetErrors, ListPackagesApiPackagesGetResponses, ListSessionDocumentsApiDocumentsSessionSessionIdGetData, ListSessionDocumentsApiDocumentsSessionSessionIdGetErrors, ListSessionDocumentsApiDocumentsSessionSessionIdGetResponses, PagePatientApiClinicianQueuePagePatientPostData, PagePatientApiClinicianQueuePagePatientPostErrors, PagePatientApiClinicianQueuePagePatientPostResponses, PurgeSessionApiSessionPurgePostData, PurgeSessionApiSessionPurgePostErrors, PurgeSessionApiSessionPurgePostResponses, QueueLiveStreamApiClinicianQueueLiveGetData, QueueLiveStreamApiClinicianQueueLiveGetErrors, QueueLiveStreamApiClinicianQueueLiveGetResponses, RespondApiIntakeRespondPostData, RespondApiIntakeRespondPostErrors, RespondApiIntakeRespondPostResponses, SelectDoctorApiIntakeSelectDoctorPostData, SelectDoctorApiIntakeSelectDoctorPostErrors, SelectDoctorApiIntakeSelectDoctorPostResponses, SelectPackageApiIntakeSelectPackagePostData, SelectPackageApiIntakeSelectPackagePostErrors, SelectPackageApiIntakeSelectPackagePostResponses, StartSessionApiIntakeStartPostData, StartSessionApiIntakeStartPostErrors, StartSessionApiIntakeStartPostResponses, TranscribeAudioApiSpeechTranscribePostData, TranscribeAudioApiSpeechTranscribePostErrors, TranscribeAudioApiSpeechTranscribePostResponses, UploadDocumentApiDocumentsUploadPostData, UploadDocumentApiDocumentsUploadPostErrors, UploadDocumentApiDocumentsUploadPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostData, VerifyPmjayApiIntakeVerifyPmjayPostErrors, VerifyPmjayApiIntakeVerifyPmjayPostResponses } from './types.gen';
+import type { AbdmEventsBySessionApiAbdmEventsSessionIdGetData, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsQueryApiAbdmEventsGetData, AbdmEventsQueryApiAbdmEventsGetErrors, AbdmEventsQueryApiAbdmEventsGetResponses, AbdmWebhookApiAbdmWebhookPostData, AbdmWebhookApiAbdmWebhookPostErrors, AbdmWebhookApiAbdmWebhookPostResponses, GenerateAbdmQrApiAbdmGenerateQrGetData, GenerateAbdmQrApiAbdmGenerateQrGetErrors, GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateSummaryApiSummaryGeneratePostData, GenerateSummaryApiSummaryGeneratePostErrors, GenerateSummaryApiSummaryGeneratePostResponses, GenerateTokenApiAuthTokenPostData, GenerateTokenApiAuthTokenPostErrors, GenerateTokenApiAuthTokenPostResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetData, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetOverviewApiClinicianOverviewGetData, GetOverviewApiClinicianOverviewGetErrors, GetOverviewApiClinicianOverviewGetResponses, GetQueueApiClinicianQueueGetData, GetQueueApiClinicianQueueGetErrors, GetQueueApiClinicianQueueGetResponses, GetSessionDetailApiClinicianSessionSessionIdGetData, GetSessionDetailApiClinicianSessionSessionIdGetErrors, GetSessionDetailApiClinicianSessionSessionIdGetResponses, GetSummaryBySessionApiSummarySessionSessionIdGetData, GetSummaryBySessionApiSummarySessionSessionIdGetErrors, GetSummaryBySessionApiSummarySessionSessionIdGetResponses, HealthCheckApiHealthGetData, HealthCheckApiHealthGetResponses, ListDoctorsApiDoctorsGetData, ListDoctorsApiDoctorsGetErrors, ListDoctorsApiDoctorsGetResponses, ListPackagesApiPackagesGetData, ListPackagesApiPackagesGetErrors, ListPackagesApiPackagesGetResponses, ListSessionDocumentsApiDocumentsSessionSessionIdGetData, ListSessionDocumentsApiDocumentsSessionSessionIdGetErrors, ListSessionDocumentsApiDocumentsSessionSessionIdGetResponses, PagePatientApiClinicianQueuePagePatientPostData, PagePatientApiClinicianQueuePagePatientPostErrors, PagePatientApiClinicianQueuePagePatientPostResponses, PurgeSessionApiSessionPurgePostData, PurgeSessionApiSessionPurgePostErrors, PurgeSessionApiSessionPurgePostResponses, QueueLiveStreamApiClinicianQueueLiveGetData, QueueLiveStreamApiClinicianQueueLiveGetErrors, QueueLiveStreamApiClinicianQueueLiveGetResponses, RespondApiIntakeRespondPostData, RespondApiIntakeRespondPostErrors, RespondApiIntakeRespondPostResponses, SelectDoctorApiIntakeSelectDoctorPostData, SelectDoctorApiIntakeSelectDoctorPostErrors, SelectDoctorApiIntakeSelectDoctorPostResponses, SelectPackageApiIntakeSelectPackagePostData, SelectPackageApiIntakeSelectPackagePostErrors, SelectPackageApiIntakeSelectPackagePostResponses, StartSessionApiIntakeStartPostData, StartSessionApiIntakeStartPostErrors, StartSessionApiIntakeStartPostResponses, TranscribeAudioApiSpeechTranscribePostData, TranscribeAudioApiSpeechTranscribePostErrors, TranscribeAudioApiSpeechTranscribePostResponses, UploadDocumentApiDocumentsUploadPostData, UploadDocumentApiDocumentsUploadPostErrors, UploadDocumentApiDocumentsUploadPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostData, VerifyPmjayApiIntakeVerifyPmjayPostErrors, VerifyPmjayApiIntakeVerifyPmjayPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -224,7 +224,7 @@ export const listDoctorsApiDoctorsGet = <ThrowOnError extends boolean = false>(o
 /**
  * Select Doctor
  *
- * Select a doctor for a session.
+ * Select a doctor for a session and persist selection.
  */
 export const selectDoctorApiIntakeSelectDoctorPost = <ThrowOnError extends boolean = false>(options: Options<SelectDoctorApiIntakeSelectDoctorPostData, ThrowOnError>): RequestResult<SelectDoctorApiIntakeSelectDoctorPostResponses, SelectDoctorApiIntakeSelectDoctorPostErrors, ThrowOnError> => (options.client ?? client).post<SelectDoctorApiIntakeSelectDoctorPostResponses, SelectDoctorApiIntakeSelectDoctorPostErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -250,7 +250,7 @@ export const listPackagesApiPackagesGet = <ThrowOnError extends boolean = false>
 /**
  * Select Package
  *
- * Select packages for a session.
+ * Select packages for a session and persist to database.
  */
 export const selectPackageApiIntakeSelectPackagePost = <ThrowOnError extends boolean = false>(options: Options<SelectPackageApiIntakeSelectPackagePostData, ThrowOnError>): RequestResult<SelectPackageApiIntakeSelectPackagePostResponses, SelectPackageApiIntakeSelectPackagePostErrors, ThrowOnError> => (options.client ?? client).post<SelectPackageApiIntakeSelectPackagePostResponses, SelectPackageApiIntakeSelectPackagePostErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -360,4 +360,41 @@ export const abdmWebhookApiAbdmWebhookPost = <ThrowOnError extends boolean = fal
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * Generate Summary
+ *
+ * Generate bilingual clinical summary and FHIR R4 Bundle for a session.
+ */
+export const generateSummaryApiSummaryGeneratePost = <ThrowOnError extends boolean = false>(options: Options<GenerateSummaryApiSummaryGeneratePostData, ThrowOnError>): RequestResult<GenerateSummaryApiSummaryGeneratePostResponses, GenerateSummaryApiSummaryGeneratePostErrors, ThrowOnError> => (options.client ?? client).post<GenerateSummaryApiSummaryGeneratePostResponses, GenerateSummaryApiSummaryGeneratePostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/summary/generate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Summary By Session
+ *
+ * Retrieve existing clinical summary for a session.
+ */
+export const getSummaryBySessionApiSummarySessionSessionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetSummaryBySessionApiSummarySessionSessionIdGetData, ThrowOnError>): RequestResult<GetSummaryBySessionApiSummarySessionSessionIdGetResponses, GetSummaryBySessionApiSummarySessionSessionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetSummaryBySessionApiSummarySessionSessionIdGetResponses, GetSummaryBySessionApiSummarySessionSessionIdGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/summary/session/{session_id}',
+    ...options
+});
+
+/**
+ * Get Fhir Bundle By Session
+ *
+ * Retrieve FHIR R4 Bundle for a session.
+ */
+export const getFhirBundleBySessionApiFhirSessionSessionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFhirBundleBySessionApiFhirSessionSessionIdGetData, ThrowOnError>): RequestResult<GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/fhir/session/{session_id}',
+    ...options
 });

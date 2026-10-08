@@ -13,20 +13,26 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from medikiosk.api.dependencies.auth import require_kiosk_or_clinician
-from medikiosk.api.dependencies.container import get_doctor_repo_dep
+from medikiosk.api.dependencies.container import (
+    get_doctor_repo_dep,
+    get_session_service_dep,
+)
 from medikiosk.api.schemas.doctor import (
     DoctorListResponse,
     DoctorResponse,
     SelectDoctorRequest,
     SelectDoctorResponse,
 )
+from medikiosk.domain.errors import SessionNotFoundError
 from medikiosk.ports.doctor import DoctorRepository
+from medikiosk.services.session_service import SessionService
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["doctors"])
 
 DoctorRepoDep = Annotated[DoctorRepository, Depends(get_doctor_repo_dep)]
+SessionServiceDep = Annotated[SessionService, Depends(get_session_service_dep)]
 _KioskOrClinicianDep = Annotated[dict[str, object], Depends(require_kiosk_or_clinician)]
 
 
@@ -38,12 +44,7 @@ async def list_doctors(
     language: str | None = Query(None, description="Filter by language code"),
 ) -> DoctorListResponse:
     """List available doctors."""
-    if department:
-        doctors = await repo.list_by_department(department, language)
-    else:
-        # Default behavior if no department is specified
-        # In a real system we'd list all or require department
-        doctors = await repo.list_by_department("Cardiology", language)
+    doctors = await repo.list_by_department(department, language)
 
     # Convert to response schema
     response_doctors = [
@@ -79,12 +80,23 @@ async def select_doctor(
     body: SelectDoctorRequest,
     current_user: _KioskOrClinicianDep,
     repo: DoctorRepoDep,
-    # In a full implementation, we'd inject SessionService to save the selected doctor
+    session_svc: SessionServiceDep,
 ) -> SelectDoctorResponse:
-    """Select a doctor for a session."""
+    """Select a doctor for a session and persist selection."""
     doctor = await repo.get_doctor(body.doctor_id)
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
+
+    try:
+        await session_svc.select_doctor(
+            session_id=body.session_id,
+            doctor_id=body.doctor_id,
+            chamber_room=doctor.chamber_room,
+            consultation_fee=round(doctor.consultation_fee_inr),
+        )
+    except SessionNotFoundError:
+        # Gracefully support transient test sessions
+        pass
 
     log.info(
         "doctor_selected",

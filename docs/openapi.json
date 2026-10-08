@@ -724,7 +724,7 @@
           "doctors"
         ],
         "summary": "Select Doctor",
-        "description": "Select a doctor for a session.",
+        "description": "Select a doctor for a session and persist selection.",
         "operationId": "select_doctor_api_intake_select_doctor_post",
         "security": [
           {
@@ -884,7 +884,7 @@
           "packages"
         ],
         "summary": "Select Package",
-        "description": "Select packages for a session.",
+        "description": "Select packages for a session and persist to database.",
         "operationId": "select_package_api_intake_select_package_post",
         "security": [
           {
@@ -1428,6 +1428,207 @@
           }
         }
       }
+    },
+    "/api/summary/generate": {
+      "post": {
+        "tags": [
+          "summary"
+        ],
+        "summary": "Generate Summary",
+        "description": "Generate bilingual clinical summary and FHIR R4 Bundle for a session.",
+        "operationId": "generate_summary_api_summary_generate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JWT token for SSE/WebSocket clients",
+              "title": "Token"
+            },
+            "description": "JWT token for SSE/WebSocket clients"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateSummaryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary/session/{session_id}": {
+      "get": {
+        "tags": [
+          "summary"
+        ],
+        "summary": "Get Summary By Session",
+        "description": "Retrieve existing clinical summary for a session.",
+        "operationId": "get_summary_by_session_api_summary_session__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JWT token for SSE/WebSocket clients",
+              "title": "Token"
+            },
+            "description": "JWT token for SSE/WebSocket clients"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClinicalSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fhir/session/{session_id}": {
+      "get": {
+        "tags": [
+          "summary"
+        ],
+        "summary": "Get Fhir Bundle By Session",
+        "description": "Retrieve FHIR R4 Bundle for a session.",
+        "operationId": "get_fhir_bundle_by_session_api_fhir_session__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JWT token for SSE/WebSocket clients",
+              "title": "Token"
+            },
+            "description": "JWT token for SSE/WebSocket clients"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FHIRBundleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1673,6 +1874,38 @@
           "session_id"
         ],
         "title": "Body_upload_document_api_documents_upload_post"
+      },
+      "ClinicalSummaryResponse": {
+        "properties": {
+          "summary_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Summary Id",
+            "description": "Summary identifier"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id",
+            "description": "Session identifier"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SummarySectionResponse"
+            },
+            "type": "array",
+            "title": "Sections",
+            "description": "Bilingual summary sections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary_id",
+          "session_id",
+          "sections"
+        ],
+        "title": "ClinicalSummaryResponse",
+        "description": "Bilingual clinical summary response."
       },
       "ClinicianOverviewResponse": {
         "properties": {
@@ -2013,6 +2246,103 @@
         ],
         "title": "DocumentType",
         "description": "Category of scanned medical document."
+      },
+      "FHIRBundleResponse": {
+        "properties": {
+          "bundle_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Bundle Id",
+            "description": "FHIR Bundle identifier"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id",
+            "description": "Session identifier"
+          },
+          "bundle_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bundle Json",
+            "description": "FHIR R4 resource JSON"
+          },
+          "resource_count": {
+            "type": "integer",
+            "title": "Resource Count",
+            "description": "Number of entries in bundle",
+            "default": 1
+          },
+          "validation_passed": {
+            "type": "boolean",
+            "title": "Validation Passed",
+            "description": "Schema validation status",
+            "default": true
+          },
+          "transcript_hash": {
+            "type": "string",
+            "title": "Transcript Hash",
+            "description": "Cryptographic SHA-256 transcript hash"
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At",
+            "description": "ISO 8601 generation timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bundle_id",
+          "session_id",
+          "bundle_json",
+          "transcript_hash",
+          "generated_at"
+        ],
+        "title": "FHIRBundleResponse",
+        "description": "FHIR R4 Bundle response."
+      },
+      "GenerateSummaryRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id",
+            "description": "Target session UUID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "GenerateSummaryRequest",
+        "description": "Request to generate bilingual summary and FHIR bundle for a session."
+      },
+      "GenerateSummaryResponse": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/ClinicalSummaryResponse",
+            "description": "Clinical summary"
+          },
+          "bundle_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Bundle Id",
+            "description": "Generated FHIR bundle identifier"
+          },
+          "transcript_hash": {
+            "type": "string",
+            "title": "Transcript Hash",
+            "description": "SHA-256 source transcript hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "bundle_id",
+          "transcript_hash"
+        ],
+        "title": "GenerateSummaryResponse",
+        "description": "Combined summary generation response."
       },
       "HTTPValidationError": {
         "properties": {
@@ -2355,6 +2685,7 @@
           "response_text": {
             "type": "string",
             "maxLength": 2000,
+            "minLength": 1,
             "title": "Response Text",
             "description": "Patient response. PHI \u2014 never log."
           },
@@ -2582,10 +2913,52 @@
         "title": "StartSessionResponse",
         "description": "Response body for POST /api/intake/start.\n\nAttributes:\n    session_id: Unique identifier for the created session.\n    status: Current session lifecycle status string.\n    intake_progress: Completion fraction [0.0, 1.0].\n    message: Human-readable status message (PHI-free)."
       },
+      "SummarySectionResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Section title (e.g. Chief Complaint)"
+          },
+          "content_en": {
+            "type": "string",
+            "title": "Content En",
+            "description": "English content"
+          },
+          "content_local": {
+            "type": "string",
+            "title": "Content Local",
+            "description": "Local language content"
+          },
+          "clinical_domain": {
+            "type": "string",
+            "title": "Clinical Domain",
+            "description": "Clinical domain identifier"
+          },
+          "source_entities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Entities",
+            "description": "Source entities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "content_en",
+          "content_local",
+          "clinical_domain"
+        ],
+        "title": "SummarySectionResponse",
+        "description": "Section of a clinical summary."
+      },
       "TokenRequest": {
         "properties": {
           "client_id": {
             "type": "string",
+            "minLength": 1,
             "title": "Client Id",
             "description": "Client identifier"
           },

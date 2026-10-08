@@ -46,7 +46,11 @@ export function App() {
 
       {/* Main View Area */}
       <main className="flex-1">
-        {activeView === 'kiosk' ? <KioskIntakeView /> : <ClinicianQueueView />}
+        {activeView === 'kiosk' ? (
+          <KioskIntakeView />
+        ) : (
+          <ClinicianQueueView onSwitchToKiosk={() => setActiveView('kiosk')} />
+        )}
       </main>
     </div>
   );

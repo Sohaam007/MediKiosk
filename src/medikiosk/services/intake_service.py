@@ -334,3 +334,17 @@ class IntakeService:
         """
         self._session_locks.pop(session_id, None)
         await self._cache.delete(f"intake:{session_id}")
+
+    async def get_intake_session(self, session_id: uuid.UUID) -> IntakeSession | None:
+        """Retrieve the cached IntakeSession aggregate if it exists.
+
+        Args:
+            session_id: The session UUID.
+
+        Returns:
+            The IntakeSession if present in cache, otherwise None.
+        """
+        cached_data = await self._cache.get(f"intake:{session_id}")
+        if not cached_data:
+            return None
+        return IntakeSession.model_validate_json(cached_data)

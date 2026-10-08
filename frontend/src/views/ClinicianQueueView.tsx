@@ -770,7 +770,11 @@ const getNextToastId = () => `toast-${++toastIdCounter}`;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function ClinicianQueueView() {
+export interface ClinicianQueueViewProps {
+  onSwitchToKiosk?: () => void;
+}
+
+export function ClinicianQueueView({ onSwitchToKiosk }: ClinicianQueueViewProps = {}) {
   const [activeTab, setActiveTab] = useState<
     'overview' | 'live_intake' | 'documents' | 'patient_profiles' | 'integrations'
   >('overview');
@@ -799,15 +803,19 @@ export function ClinicianQueueView() {
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'critical' | 'urgent' | 'normal'>('all');
 
   // Documents Tab states
-  const [documentsData] = useState<ProcessedDocument[]>(INITIAL_DOCUMENTS);
+  const [documentsData, setDocumentsData] = useState<ProcessedDocument[]>(INITIAL_DOCUMENTS);
   const [docSearchQuery, setDocSearchQuery] = useState('');
   const [activePreviewDoc, setActivePreviewDoc] = useState<ProcessedDocument | null>(null);
 
   // Patient Profiles Tab states
-  const [profilesData] = useState<HistoricalPatientProfile[]>(INITIAL_PROFILES);
+  const [profilesData, setProfilesData] = useState<HistoricalPatientProfile[]>(INITIAL_PROFILES);
   const [profileSearchQuery, setProfileSearchQuery] = useState('');
   const [selectedProfileId, setSelectedProfileId] = useState<string>(INITIAL_PROFILES[0].id);
   const [newClinicalNote, setNewClinicalNote] = useState('');
+
+  // Header language & notification popover states
+  const [clinicianLanguage, setClinicianLanguage] = useState<'bilingual' | 'english' | 'hindi'>('bilingual');
+  const [showNotificationPanel, setShowNotificationPanel] = useState<boolean>(false);
 
   // Integrations Tab states
   const [integrationsData, setIntegrationsData] = useState<IntegrationCard[]>(INITIAL_INTEGRATIONS);
@@ -1128,16 +1136,29 @@ export function ClinicianQueueView() {
     });
   };
 
-  // Action: Ping Integration
+  // Action: Ping Integration with real health endpoint latency
   const handlePingIntegration = async (integrationId: string) => {
     setPingingIntegrationId(integrationId);
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    const start = performance.now();
+    let isOk = true;
+    try {
+      const res = await fetch('/api/health');
+      if (!res.ok) isOk = false;
+    } catch {
+      isOk = false;
+    }
+    const realLatency = Math.max(8, Math.round(performance.now() - start));
     if (!isMountedRef.current) return;
-    const randomLatency = Math.floor(Math.random() * 25) + 30;
 
     setIntegrationsData((prev) =>
       prev.map((item) =>
-        item.id === integrationId ? { ...item, latency_ms: randomLatency, status: 'operational' } : item
+        item.id === integrationId
+          ? {
+              ...item,
+              latency_ms: realLatency,
+              status: isOk ? 'operational' : 'degraded',
+            }
+          : item
       )
     );
     setPingingIntegrationId(null);
@@ -1145,20 +1166,46 @@ export function ClinicianQueueView() {
     const target = integrationsData.find((i) => i.id === integrationId);
     setToastMessage({
       id: getNextToastId(),
-      type: 'success',
-      title: 'Gateway Ping Successful',
-      detail: `${target?.title || 'Gateway'} health check returned HTTP 200 OK (${randomLatency}ms round-trip).`,
+      type: isOk ? 'success' : 'warning',
+      title: isOk ? 'Gateway Ping Successful' : 'Gateway Degraded',
+      detail: `${target?.title || 'Gateway'} health probe completed: ${isOk ? 'HTTP 200 OK' : 'HTTP Warning'} (${realLatency}ms round-trip).`,
     });
   };
 
-  // Action: Add note to historical profile
+  // Action: Add note to historical profile with real state persistence
   const handleSaveClinicalNote = (profileName: string) => {
     if (!newClinicalNote.trim()) return;
+    const noteContent = newClinicalNote.trim();
+
+    setProfilesData((prev) =>
+      prev.map((p) => {
+        if (p.id === selectedProfileId) {
+          const newVisit = {
+            date: new Date().toISOString().split('T')[0],
+            department: 'Kayachikitsa OPD',
+            doctor: 'Dr. Ananya Shah',
+            diagnosis: 'Clinical Addendum',
+            rx_summary: noteContent,
+            follow_up: 'Next scheduled review or SOS',
+          };
+          return {
+            ...p,
+            visit_history: [newVisit, ...p.visit_history],
+            soap_ayush_notes: {
+              ...p.soap_ayush_notes,
+              plan: `${p.soap_ayush_notes.plan}\n\n[Addendum ${new Date().toLocaleTimeString()}]: ${noteContent}`,
+            },
+          };
+        }
+        return p;
+      })
+    );
+
     setToastMessage({
       id: getNextToastId(),
       type: 'success',
       title: 'Clinical Impression Appended',
-      detail: `Physician note logged into ${profileName}'s immutable EMR timeline.`,
+      detail: `Physician note logged into ${profileName}'s record and SOAP assessment.`,
     });
     setNewClinicalNote('');
   };
@@ -1264,7 +1311,17 @@ export function ClinicianQueueView() {
           </p>
 
           {/* Clinician Mode Switch Card */}
-          <div className="flex items-center justify-between bg-[#0A1F33] rounded-xl p-3 mb-6 border border-[#1E3A8A]/60 shadow-inner">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              if (onSwitchToKiosk) {
+                onSwitchToKiosk();
+              }
+            }}
+            className="flex items-center justify-between bg-[#0A1F33] hover:bg-[#132C47] cursor-pointer rounded-xl p-3 mb-6 border border-[#1E3A8A]/60 shadow-inner transition-colors"
+            title="Click to switch to Patient Kiosk Terminal"
+          >
             <div>
               <span className="text-xs font-bold text-blue-100 uppercase tracking-wide">Mode</span>
               <p className="text-sm font-semibold text-white">Clinician Console</p>
@@ -1390,14 +1447,70 @@ export function ClinicianQueueView() {
           </div>
 
           <div className="flex items-center gap-5">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200">
-              <Globe className="w-3.5 h-3.5 text-slate-500" />
-              <span>EN / HI Bilingual</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setClinicianLanguage((prev) =>
+                  prev === 'bilingual' ? 'hindi' : prev === 'hindi' ? 'english' : 'bilingual'
+                );
+              }}
+              className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200"
+              title="Toggle Clinician Console Language Mode"
+            >
+              <Globe className="w-3.5 h-3.5 text-blue-600" />
+              <span>
+                {clinicianLanguage === 'bilingual'
+                  ? 'EN / HI Bilingual'
+                  : clinicianLanguage === 'hindi'
+                  ? 'हिन्दी (Hindi Only)'
+                  : 'English Only'}
+              </span>
+            </button>
 
-            <div className="relative cursor-pointer hover:bg-slate-100 p-2 rounded-full transition-colors text-slate-600">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNotificationPanel((prev) => !prev)}
+                className="relative cursor-pointer hover:bg-slate-100 p-2 rounded-full transition-colors text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="View Active Clinical Triage Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
+              </button>
+
+              {showNotificationPanel && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="font-bold text-xs uppercase tracking-wider text-[#0F2E4A]">
+                      Clinical Alerts & Paging
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowNotificationPanel(false)}
+                      className="text-slate-400 hover:text-slate-600 text-xs p-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="mt-3 space-y-2.5 max-h-64 overflow-y-auto">
+                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+                        <span>Emergency Alert</span>
+                      </div>
+                      <p className="mt-1 text-slate-600">
+                        Acute chest pain flagged at Kiosk #01 (Session active).
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900">
+                      <div className="font-bold">Queue Notice</div>
+                      <p className="mt-1 text-slate-600">
+                        {queueData.length} patients waiting in Kayachikitsa & General OPD.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3 border-l border-slate-200 pl-5">
@@ -2392,6 +2505,24 @@ export function ClinicianQueueView() {
                         ABDM FHIR R4 Bundle Validation: <strong className="text-emerald-700">Valid ✓</strong>
                       </span>
                       <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDocumentsData((prev) =>
+                              prev.map((d) => (d.id === activePreviewDoc.id ? { ...d, status: 'verified' as const } : d))
+                            );
+                            setToastMessage({
+                              id: getNextToastId(),
+                              type: 'success',
+                              title: 'Document Verified',
+                              detail: `${activePreviewDoc.document_type} marked verified.`,
+                            });
+                          }}
+                          className="min-h-[48px] min-w-[48px] border-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Verify Scan</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => setActivePreviewDoc(null)}

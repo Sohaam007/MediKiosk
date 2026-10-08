@@ -8,13 +8,18 @@ from medikiosk.api.dependencies.auth import (
     require_kiosk_or_clinician,
 )
 from medikiosk.api.dependencies.container import (
+    get_document_repo_dep,
     get_engine_dep,
+    get_fhir_repo_dep,
     get_intake_service_dep,
     get_session_service_dep,
+    get_summary_repo_dep,
+    get_summary_service_dep,
 )
 from medikiosk.domain.contracts import SessionStatus
 from medikiosk.services.intake_service import IntakeService
 from medikiosk.services.session_service import SessionService
+from medikiosk.services.summary_service import SummaryService
 
 
 # Fake in-memory session repo
@@ -67,11 +72,54 @@ class FakeLLM:
         return "Extracted text"
 
 
+class FakeSummaryRepo:
+    def __init__(self):
+        self._summaries = {}
+
+    async def save(self, summary):
+        self._summaries[str(summary.session_id)] = summary
+        return summary
+
+    async def get_for_session(self, session_id):
+        return self._summaries.get(str(session_id))
+
+
+class FakeFHIRRepo:
+    def __init__(self):
+        self._bundles = {}
+
+    async def save(self, bundle):
+        self._bundles[str(bundle.session_id)] = bundle
+        return bundle
+
+    async def get_for_session(self, session_id):
+        return self._bundles.get(str(session_id))
+
+
+class FakeDocumentRepo:
+    def __init__(self):
+        self._docs = []
+
+    async def save(self, doc):
+        self._docs.append(doc)
+        return doc
+
+    async def list_for_session(self, session_id):
+        return [d for d in self._docs if str(d.session_id) == str(session_id)]
+
+    async def list_by_session(self, session_id):
+        return [d for d in self._docs if str(d.session_id) == str(session_id)]
+
+
 # Build fake services
 fake_session_repo = FakeSessionRepo()
 fake_audit_repo = FakeAuditRepo()
+fake_summary_repo = FakeSummaryRepo()
+fake_fhir_repo = FakeFHIRRepo()
+fake_document_repo = FakeDocumentRepo()
 fake_llm = FakeLLM()
 fake_session_service = SessionService(fake_session_repo, fake_audit_repo, ttl_seconds=3600)
+fake_summary_service = SummaryService(fake_llm, fake_summary_repo, fake_fhir_repo, fake_audit_repo)
 
 
 # Fake engine (for health check)
@@ -92,6 +140,22 @@ class FakeEngine:
 
 def get_fake_session_service():
     return fake_session_service
+
+
+def get_fake_summary_service():
+    return fake_summary_service
+
+
+def get_fake_summary_repo():
+    return fake_summary_repo
+
+
+def get_fake_fhir_repo():
+    return fake_fhir_repo
+
+
+def get_fake_document_repo():
+    return fake_document_repo
 
 
 fake_cache = InMemoryCacheAdapter()
@@ -120,6 +184,10 @@ def app_kiosk():
     app = create_app()
     app.dependency_overrides[get_session_service_dep] = get_fake_session_service
     app.dependency_overrides[get_intake_service_dep] = get_fake_intake_service
+    app.dependency_overrides[get_summary_service_dep] = get_fake_summary_service
+    app.dependency_overrides[get_summary_repo_dep] = get_fake_summary_repo
+    app.dependency_overrides[get_fhir_repo_dep] = get_fake_fhir_repo
+    app.dependency_overrides[get_document_repo_dep] = get_fake_document_repo
     app.dependency_overrides[get_engine_dep] = get_fake_engine
     app.dependency_overrides[require_kiosk_or_clinician] = get_fake_kiosk_user
     app.dependency_overrides[require_clinician] = get_fake_nurse_user

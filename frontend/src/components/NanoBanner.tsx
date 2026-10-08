@@ -30,16 +30,18 @@ const TICKER_ITEMS: TickerItem[] = [
     title: 'Ayushman Bharat PM-JAY & ABHA M1/M2/M3 Integrated',
     subtitle: '₹5,00,000 Cashless Cover Accepted · Instant Golden Card Verification',
     icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />,
-    actionText: 'View Details',
+    actionText: 'PM-JAY Info',
+    actionHref: 'https://abdm.gov.in/',
   },
   {
     id: 'ai-voice',
     badge: 'SOCRATES AI 2.0',
     badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
     title: 'Bilingual AI Voice Intake Active',
-    subtitle: '8 Indian Languages (हिन्दी, English, বাংলা, தமிழ், తెలుగు, मराठी, ગુજરાતી, ಕನ್ನಡ)',
+    subtitle: '8 Indian Languages (हिन्दी, English, বাংলা, தமிழ், తెలుగు, मराठी, ગુજરાती, ಕನ್ನಡ)',
     icon: <Sparkles className="w-3.5 h-3.5 text-sky-400 animate-spin-slow" />,
     actionText: 'Start Voice',
+    actionHref: '/',
   },
   {
     id: 'vitals-triage',
@@ -49,6 +51,7 @@ const TICKER_ITEMS: TickerItem[] = [
     subtitle: 'VetoEngine Sub-second Red-Flag Screen · DPDP Act 2023 Digital Erasure Ready',
     icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />,
     actionText: 'OPD Queue',
+    actionHref: '/clinician',
   },
 ];
 

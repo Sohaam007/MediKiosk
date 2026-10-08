@@ -218,6 +218,7 @@ def create_app() -> FastAPI:
         intake,
         package,
         speech,
+        summary,
     )
 
     app.include_router(health.router)
@@ -229,6 +230,7 @@ def create_app() -> FastAPI:
     app.include_router(document.router)
     app.include_router(speech.router)
     app.include_router(abdm.router)
+    app.include_router(summary.router)
 
     log.info("app_created", title="MediKiosk", version="0.2.0")
     return app
