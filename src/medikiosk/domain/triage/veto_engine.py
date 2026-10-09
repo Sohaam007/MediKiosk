@@ -26,46 +26,57 @@ class VetoEngine:
     """Pure, deterministic rule engine for clinical red flags."""
 
     # Keywords mapped to clinical concepts (includes Hinglish)
-    _CARDIAC_BASE: ClassVar[set[str]] = {
-        "chest pain",
-        "seene mein dard",
-        "chaati mein dard",
-        "chest pressure",
-        "pressure in chest",
-        "chest tightness",
-        "tightness in chest",
-        "chest heaviness",
-        "heaviness in chest",
-    }
-    _CARDIAC_RADIATION: ClassVar[set[str]] = {
-        "left arm",
-        "jaw",
-        "back",
-        "ulta haath",
-        "bayein haath",
-        "left shoulder",
-        "shoulder and arm",
-        "shoulder",
-    }
-    _CARDIAC_EPIGASTRIC: ClassVar[set[str]] = {"epigastric discomfort", "pet ke upar dard"}
-    _CARDIAC_DIAPHORESIS: ClassVar[set[str]] = {
-        "diaphoresis",
-        "sweating heavily",
-        "pasina",
-        "pasiina",
-    }
+    # Immutable frozensets for concurrency safety
+    _CARDIAC_BASE: ClassVar[frozenset[str]] = frozenset(
+        {
+            "chest pain",
+            "seene mein dard",
+            "chaati mein dard",
+            "chest pressure",
+            "pressure in chest",
+            "chest tightness",
+            "tightness in chest",
+            "chest heaviness",
+            "heaviness in chest",
+        }
+    )
+    _CARDIAC_RADIATION: ClassVar[frozenset[str]] = frozenset(
+        {
+            "left arm",
+            "jaw",
+            "back",
+            "ulta haath",
+            "bayein haath",
+            "left shoulder",
+            "shoulder and arm",
+            "shoulder",
+        }
+    )
+    _CARDIAC_EPIGASTRIC: ClassVar[frozenset[str]] = frozenset(
+        {"epigastric discomfort", "pet ke upar dard"}
+    )
+    _CARDIAC_DIAPHORESIS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "diaphoresis",
+            "sweating heavily",
+            "pasina",
+            "pasiina",
+        }
+    )
 
-    _STROKE_KEYWORDS: ClassVar[set[str]] = {
-        "facial droop",
-        "face drooping",
-        "muh teda",
-        "arm drift",
-        "arm weakness",
-        "haath kamzor",
-        "dysarthria",
-        "slurred speech",
-        "bolne mein dikkat",
-    }
+    _STROKE_KEYWORDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "facial droop",
+            "face drooping",
+            "muh teda",
+            "arm drift",
+            "arm weakness",
+            "haath kamzor",
+            "dysarthria",
+            "slurred speech",
+            "bolne mein dikkat",
+        }
+    )
 
     @staticmethod
     def evaluate(
@@ -92,7 +103,8 @@ class VetoEngine:
         telemetry = telemetry or []
 
         # 1. Evaluate Text Inputs (Cardiac & Stroke)
-        combined_text = " ".join(text_inputs).lower()
+        safe_inputs = [str(t) for t in text_inputs if t is not None]
+        combined_text = " ".join(safe_inputs).lower()
 
         # Cardiac Check
         has_base = any(kw in combined_text for kw in VetoEngine._CARDIAC_BASE)

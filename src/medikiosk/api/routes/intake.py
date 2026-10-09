@@ -38,7 +38,13 @@ from medikiosk.api.schemas.intake import (
     StartSessionResponse,
     VerifyPMJAYRequest,
 )
-from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult
+from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult, SessionStatus
+from medikiosk.domain.errors import SessionTerminatedError
+from medikiosk.domain.intake.clinical_questions import (
+    generate_next_question,
+    get_termination_acknowledgement,
+    is_concluding_response,
+)
 from medikiosk.ports.insurance import PMJAYEligibilityPort
 from medikiosk.services.intake_service import IntakeService
 from medikiosk.services.session_service import SessionService
@@ -147,6 +153,8 @@ async def respond(
     """
     # Verify the session exists and is active — raises domain errors on failure
     session = await session_svc.get_session(body.session_id)
+    if session.status == SessionStatus.COMPLETED:
+        raise SessionTerminatedError(f"Session {session.session_id} is already completed.")
 
     log.info("intake_respond_received", session_id=str(body.session_id))
     # NOTE: body.response_text is PHI — NEVER log it.
@@ -171,12 +179,28 @@ async def respond(
             }
         )
 
+    if len(updated_session.responses) >= 3 and is_concluding_response(body.response_text):
+        next_question = get_termination_acknowledgement(session.patient_language)
+        progress = 1.0
+    else:
+        previous_responses = [r.response_text for r in updated_session.responses]
+        next_question = generate_next_question(
+            response_text=body.response_text,
+            turn_index=len(updated_session.responses),
+            lang=session.patient_language,
+            history=previous_responses,
+        )
+        progress = updated_session.progress
+
+    # Update session progress in the persistent store
+    await session_svc.update_progress(session.session_id, progress)
+
     return RespondResponse(
         session_id=session.session_id,
-        intake_progress=updated_session.progress,
+        intake_progress=progress,
         human_fallback_triggered=updated_session.human_fallback_triggered,
         triage_alerts=triage_alerts_out,
-        next_question="Please describe your chief complaint.",
+        next_question=next_question,
     )
 
 
@@ -287,4 +311,3 @@ async def verify_pmjay(
         )
 
     return result
-

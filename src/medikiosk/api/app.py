@@ -205,17 +205,32 @@ def create_app() -> FastAPI:
             },
         )
 
-
     # ── Routers ────────────────────────────────────────────────────────────────
     # Lane 3 implements the full route handlers; stub modules exist now.
 
-    from medikiosk.api.routes import clinician, doctor, health, intake, package
+    from medikiosk.api.routes import (
+        abdm,
+        auth,
+        clinician,
+        doctor,
+        document,
+        health,
+        intake,
+        package,
+        speech,
+        summary,
+    )
 
     app.include_router(health.router)
     app.include_router(intake.router)
     app.include_router(clinician.router)
     app.include_router(doctor.router)
     app.include_router(package.router)
+    app.include_router(auth.router)
+    app.include_router(document.router)
+    app.include_router(speech.router)
+    app.include_router(abdm.router)
+    app.include_router(summary.router)
 
     log.info("app_created", title="MediKiosk", version="0.2.0")
     return app

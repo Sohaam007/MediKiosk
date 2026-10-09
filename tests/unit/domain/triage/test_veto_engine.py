@@ -169,4 +169,3 @@ def test_veto_rule_enum():
     assert VetoRule.ACUTE_CORONARY_SYNDROME == "CARDIAC_RED_FLAG"
     assert VetoRule.CARDIAC_RED_FLAG == "CARDIAC_RED_FLAG"
     assert VetoRule.STROKE_FAST_PROTOCOL == "STROKE_FAST_PROTOCOL"
-

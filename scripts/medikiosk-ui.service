@@ -1,0 +1,35 @@
+[Unit]
+Description=MediKiosk Touchscreen Edge UI Service
+Documentation=https://github.com/Sohaam007/MediKiosk
+After=network-online.target graphical.target medikiosk-backend.service
+Wants=network-online.target graphical.target
+
+[Service]
+Type=simple
+User=kiosk
+Group=kiosk
+WorkingDirectory=/opt/medikiosk
+
+# Display & Environment Variables
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/kiosk/.Xauthority
+Environment=KIOSK_URL=http://localhost:4173
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+
+# Launch edge kiosk script
+ExecStart=/bin/bash /opt/medikiosk/scripts/launch_kiosk_linux.sh
+
+# High Availability & Auto-Recovery
+Restart=always
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=10
+
+# Sandboxing & Resource Protection
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=medikiosk-ui
+
+[Install]
+WantedBy=graphical.target

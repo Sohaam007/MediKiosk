@@ -284,6 +284,7 @@ def get_notification_adapter_dep() -> NotificationPort:
 
     return MockWhatsAppNotificationAdapter()
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Service dependencies
 # ──────────────────────────────────────────────────────────────────────────────

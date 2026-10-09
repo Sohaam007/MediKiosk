@@ -19,10 +19,13 @@ class InMemoryDoctorRepository:
         return self.doctors.get(doctor_id)
 
     async def list_by_department(
-        self, department: str, language: str | None = None
+        self, department: str | None = None, language: str | None = None
     ) -> list[DoctorProfile]:
-        """List doctors in a specific department."""
-        docs = [d for d in self.doctors.values() if d.department.lower() == department.lower()]
+        """List doctors, optionally filtering by department and language."""
+        if department:
+            docs = [d for d in self.doctors.values() if d.department.lower() == department.lower()]
+        else:
+            docs = list(self.doctors.values())
         if language:
             docs = [d for d in docs if language.lower() in [lang.lower() for lang in d.languages]]
         return docs

@@ -12,6 +12,7 @@ SECURITY:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import uuid
 from datetime import UTC, datetime
@@ -28,7 +29,11 @@ from medikiosk.domain.contracts import (
     SessionStatus,
     TriageAlert,
 )
-from medikiosk.domain.errors import SessionExpiredError, SessionNotFoundError
+from medikiosk.domain.errors import (
+    SessionExpiredError,
+    SessionNotFoundError,
+    ValidationError,
+)
 from medikiosk.domain.intake.ayush_mapper import AYUSHMapper
 from medikiosk.domain.triage.veto_engine import VetoEngine
 from medikiosk.ports.audit import AuditRepository
@@ -63,6 +68,18 @@ class IntakeService:
         self._llm = llm
         self._cache = cache
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._session_locks: dict[uuid.UUID, asyncio.Lock] = {}
+
+    def _get_session_lock(self, session_id: uuid.UUID) -> asyncio.Lock:
+        """Retrieve or create an asyncio.Lock for the session, pruning stale locks."""
+        if session_id not in self._session_locks:
+            if len(self._session_locks) > 2000:
+                # Evict unlocked entries to prevent memory growth
+                unlocked_keys = [k for k, lock in self._session_locks.items() if not lock.locked()]
+                for k in unlocked_keys[:1000]:
+                    self._session_locks.pop(k, None)
+            self._session_locks[session_id] = asyncio.Lock()
+        return self._session_locks[session_id]
 
     async def _next_seq(self, session_id: uuid.UUID) -> int:
         """Return the next monotonic sequence number for the session.
@@ -145,164 +162,169 @@ class IntakeService:
             AuditError: If any audit write fails.
             SessionExpiredError: If intake session is not found in cache.
         """
-        cached_data = await self._cache.get(f"intake:{session_id}")
-        if not cached_data:
-            session = await self._session_repo.get(session_id)
-            if session is None:
-                raise SessionNotFoundError(f"Session not found: {session_id}")
-            if session.status == SessionStatus.TERMINATED:
-                raise SessionExpiredError(f"Session is terminated: {session_id}")
-            # Lazily initialize if active in DB but cache evicted
-            intake_session = await self.start_intake(session_id)
-        else:
-            intake_session = IntakeSession.model_validate_json(cached_data)
+        clean_text = response_text.strip()
+        if not clean_text:
+            raise ValidationError("Patient response text cannot be empty or whitespace only.")
 
-        triage_alerts: list[TriageAlert] = []
-        updates: dict[str, object] = {}
+        async with self._get_session_lock(session_id):
+            cached_data = await self._cache.get(f"intake:{session_id}")
+            if not cached_data:
+                session = await self._session_repo.get(session_id)
+                if session is None:
+                    raise SessionNotFoundError(f"Session not found: {session_id}")
+                if session.status == SessionStatus.TERMINATED:
+                    raise SessionExpiredError(f"Session is terminated: {session_id}")
+                # Lazily initialize if active in DB but cache evicted
+                intake_session = await self.start_intake(session_id)
+            else:
+                intake_session = IntakeSession.model_validate_json(cached_data)
 
-        # ── CFI update ──────────────────────────────────────────────────────
-        current_frustration = intake_session.frustration_index
-        if confidence < 0.4:
-            current_frustration += 1
-            seq = await self._next_seq(session_id)
-            await self._audit_repo.append(
-                AuditEvent(
-                    event_id=uuid.uuid4(),
-                    session_id=session_id,
-                    event_type=AuditEventType.CFI_INCREMENTED,
-                    timestamp=now,
-                    sequence_number=seq,
-                    payload={
-                        "new_cfi": current_frustration,
-                        "reason": "low_asr_confidence",
-                        "confidence": confidence,
-                    },
-                )
-            )
-        updates["frustration_index"] = current_frustration
+            triage_alerts: list[TriageAlert] = []
+            updates: dict[str, object] = {}
 
-        # ── Human fallback check ─────────────────────────────────────────────
-        if current_frustration >= intake_session.frustration_threshold:
-            updates["human_fallback_triggered"] = True
-            seq = await self._next_seq(session_id)
-            await self._audit_repo.append(
-                AuditEvent(
-                    event_id=uuid.uuid4(),
-                    session_id=session_id,
-                    event_type=AuditEventType.HUMAN_FALLBACK_TRIGGERED,
-                    timestamp=now,
-                    sequence_number=seq,
-                    payload={"cfi": current_frustration},
-                )
-            )
-            updated_session = intake_session.model_copy(update=updates)
-            await self._cache.set(
-                f"intake:{session_id}",
-                updated_session.model_dump_json(),
-                ttl_seconds=self._cache_ttl_seconds,
-            )
-            return updated_session, []
-
-        # ── Veto engine (deterministic — no LLM) ────────────────────────────
-        all_text_inputs = [r.response_text for r in intake_session.responses] + [response_text]
-        new_alerts = VetoEngine.evaluate(
-            text_inputs=all_text_inputs,
-            alert_id_generator=uuid.uuid4,
-            now=now,
-        )
-
-        existing_rule_names = {
-            a.get("rule_name") if isinstance(a, dict) else getattr(a, "rule_name", None)
-            for a in intake_session.triage_alerts
-        }
-
-        for alert in new_alerts:
-            triage_alerts.append(alert)
-            if alert.rule_name not in existing_rule_names:
-                existing_rule_names.add(alert.rule_name)
+            # ── CFI update ──────────────────────────────────────────────────────
+            current_frustration = intake_session.frustration_index
+            if confidence < 0.4:
+                current_frustration += 1
                 seq = await self._next_seq(session_id)
                 await self._audit_repo.append(
                     AuditEvent(
                         event_id=uuid.uuid4(),
                         session_id=session_id,
-                        event_type=AuditEventType.TRIAGE_ALERT_FIRED,
+                        event_type=AuditEventType.CFI_INCREMENTED,
                         timestamp=now,
                         sequence_number=seq,
-                        # Payload: alert_id + priority only — NOT trigger_text (PHI)
                         payload={
-                            "alert_id": str(alert.alert_id),
-                            "priority": alert.priority.value,
-                            "rule_name": alert.rule_name,
+                            "new_cfi": current_frustration,
+                            "reason": "low_asr_confidence",
+                            "confidence": confidence,
                         },
                     )
                 )
+            updates["frustration_index"] = current_frustration
 
-        # ── Record response (hash only — never raw text) ─────────────────────
-        response_hash = hashlib.sha256(response_text.encode()).hexdigest()
-        seq = await self._next_seq(session_id)
-        await self._audit_repo.append(
-            AuditEvent(
-                event_id=uuid.uuid4(),
-                session_id=session_id,
-                event_type=AuditEventType.RESPONSE_RECEIVED,
-                timestamp=now,
-                sequence_number=seq,
-                payload={"response_hash": response_hash, "confidence": confidence},
+            # ── Human fallback check ─────────────────────────────────────────────
+            if current_frustration >= intake_session.frustration_threshold:
+                updates["human_fallback_triggered"] = True
+                seq = await self._next_seq(session_id)
+                await self._audit_repo.append(
+                    AuditEvent(
+                        event_id=uuid.uuid4(),
+                        session_id=session_id,
+                        event_type=AuditEventType.HUMAN_FALLBACK_TRIGGERED,
+                        timestamp=now,
+                        sequence_number=seq,
+                        payload={"cfi": current_frustration},
+                    )
+                )
+                updated_session = intake_session.model_copy(update=updates)
+                await self._cache.set(
+                    f"intake:{session_id}",
+                    updated_session.model_dump_json(),
+                    ttl_seconds=self._cache_ttl_seconds,
+                )
+                return updated_session, []
+
+            # ── Veto engine (deterministic — no LLM) ────────────────────────────
+            all_text_inputs = [r.response_text for r in intake_session.responses] + [clean_text]
+            new_alerts = VetoEngine.evaluate(
+                text_inputs=all_text_inputs,
+                alert_id_generator=uuid.uuid4,
+                now=now,
             )
-        )
 
-        # ── Extract Ayurvedic Entities (AYUSH) ──────────────────────────────
-        extracted_data: dict[str, object] = {}
-        response_lower = response_text.lower()
-        for term in AYUSHMapper._MAPPINGS.keys():
-            if term in response_lower:
-                mapped_entity = AYUSHMapper.map_term(term, uuid.uuid4())
-                if "ayush_entities" not in extracted_data:
-                    extracted_data["ayush_entities"] = []
-                # Ensure it's treated as a list
-                entity_list = extracted_data["ayush_entities"]
-                if isinstance(entity_list, list):
-                    entity_list.append(mapped_entity.model_dump(mode="json"))
+            existing_rule_names = {
+                a.get("rule_name") if isinstance(a, dict) else getattr(a, "rule_name", None)
+                for a in intake_session.triage_alerts
+            }
 
-        # ── Append response and update progress ─────────────────────────────
-        # IntakeSession is frozen — we need a question_id to construct an IntakeResponse.
-        # Use a deterministic UUID derived from the session_id + response index.
-        response_index = len(intake_session.responses)
-        question_id = uuid.uuid5(session_id, f"q{response_index}")
+            for alert in new_alerts:
+                triage_alerts.append(alert)
+                if alert.rule_name not in existing_rule_names:
+                    existing_rule_names.add(alert.rule_name)
+                    seq = await self._next_seq(session_id)
+                    await self._audit_repo.append(
+                        AuditEvent(
+                            event_id=uuid.uuid4(),
+                            session_id=session_id,
+                            event_type=AuditEventType.TRIAGE_ALERT_FIRED,
+                            timestamp=now,
+                            sequence_number=seq,
+                            # Payload: alert_id + priority only — NOT trigger_text (PHI)
+                            payload={
+                                "alert_id": str(alert.alert_id),
+                                "priority": alert.priority.value,
+                                "rule_name": alert.rule_name,
+                            },
+                        )
+                    )
 
-        new_response = IntakeResponse(
-            question_id=question_id,
-            response_text=response_text,
-            response_source=ResponseSource.VOICE,
-            extracted_data=extracted_data,
-        )
-        new_responses = (*intake_session.responses, new_response)
-        new_progress = min(1.0, len(new_responses) / 20.0)
+            # ── Record response (hash only — never raw text) ─────────────────────
+            response_hash = hashlib.sha256(clean_text.encode()).hexdigest()
+            seq = await self._next_seq(session_id)
+            await self._audit_repo.append(
+                AuditEvent(
+                    event_id=uuid.uuid4(),
+                    session_id=session_id,
+                    event_type=AuditEventType.RESPONSE_RECEIVED,
+                    timestamp=now,
+                    sequence_number=seq,
+                    payload={"response_hash": response_hash, "confidence": confidence},
+                )
+            )
 
-        updates["responses"] = new_responses
-        updates["progress"] = new_progress
+            # ── Extract Ayurvedic Entities (AYUSH) ──────────────────────────────
+            extracted_data: dict[str, object] = {}
+            response_lower = clean_text.lower()
+            for term in AYUSHMapper._MAPPINGS.keys():
+                if term in response_lower:
+                    mapped_entity = AYUSHMapper.map_term(term, uuid.uuid4())
+                    if "ayush_entities" not in extracted_data:
+                        extracted_data["ayush_entities"] = []
+                    # Ensure it's treated as a list
+                    entity_list = extracted_data["ayush_entities"]
+                    if isinstance(entity_list, list):
+                        entity_list.append(mapped_entity.model_dump(mode="json"))
 
-        # Combine existing persisted triage alerts with new alerts
-        combined_alerts: list[object] = list(intake_session.triage_alerts)
-        existing_rules = {
-            x.get("rule_name") if isinstance(x, dict) else getattr(x, "rule_name", None)
-            for x in combined_alerts
-        }
-        for a in new_alerts:
-            if a.rule_name not in existing_rules:
-                existing_rules.add(a.rule_name)
-                combined_alerts.append(a)
-        updates["triage_alerts"] = tuple(combined_alerts)
+            # ── Append response and update progress ─────────────────────────────
+            # IntakeSession is frozen — we need a question_id to construct an IntakeResponse.
+            # Use a deterministic UUID derived from the session_id + response index.
+            response_index = len(intake_session.responses)
+            question_id = uuid.uuid5(session_id, f"q{response_index}")
 
-        updated_session = intake_session.model_copy(update=updates)
+            new_response = IntakeResponse(
+                question_id=question_id,
+                response_text=clean_text,
+                response_source=ResponseSource.VOICE,
+                extracted_data=extracted_data,
+            )
+            new_responses = (*intake_session.responses, new_response)
+            new_progress = min(1.0, len(new_responses) / 20.0)
 
-        await self._cache.set(
-            f"intake:{session_id}",
-            updated_session.model_dump_json(),
-            ttl_seconds=self._cache_ttl_seconds,
-        )
+            updates["responses"] = new_responses
+            updates["progress"] = new_progress
 
-        return updated_session, triage_alerts
+            # Combine existing persisted triage alerts with new alerts
+            combined_alerts: list[object] = list(intake_session.triage_alerts)
+            existing_rules = {
+                x.get("rule_name") if isinstance(x, dict) else getattr(x, "rule_name", None)
+                for x in combined_alerts
+            }
+            for a in new_alerts:
+                if a.rule_name not in existing_rules:
+                    existing_rules.add(a.rule_name)
+                    combined_alerts.append(a)
+            updates["triage_alerts"] = tuple(combined_alerts)
+
+            updated_session = intake_session.model_copy(update=updates)
+
+            await self._cache.set(
+                f"intake:{session_id}",
+                updated_session.model_dump_json(),
+                ttl_seconds=self._cache_ttl_seconds,
+            )
+
+            return updated_session, triage_alerts
 
     async def close_intake(self, session_id: uuid.UUID) -> None:
         """Close an intake session and remove it from the cache.
@@ -310,4 +332,19 @@ class IntakeService:
         Args:
             session_id: The session UUID.
         """
+        self._session_locks.pop(session_id, None)
         await self._cache.delete(f"intake:{session_id}")
+
+    async def get_intake_session(self, session_id: uuid.UUID) -> IntakeSession | None:
+        """Retrieve the cached IntakeSession aggregate if it exists.
+
+        Args:
+            session_id: The session UUID.
+
+        Returns:
+            The IntakeSession if present in cache, otherwise None.
+        """
+        cached_data = await self._cache.get(f"intake:{session_id}")
+        if not cached_data:
+            return None
+        return IntakeSession.model_validate_json(cached_data)
