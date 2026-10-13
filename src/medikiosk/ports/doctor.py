@@ -19,9 +19,9 @@ class DoctorRepository(Protocol):
         ...
 
     async def list_by_department(
-        self, department: str, language: str | None = None
+        self, department: str | None = None, language: str | None = None
     ) -> list[DoctorProfile]:
-        """List doctors in a specific department, optionally filtering by language."""
+        """List doctors, optionally filtering by department and language."""
         ...
 
     async def list_available(self, department: str) -> list[DoctorProfile]:

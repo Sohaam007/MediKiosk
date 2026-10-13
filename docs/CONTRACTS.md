@@ -14,11 +14,13 @@ from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
+
 class SessionStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     COMPLETED = "completed"
     TERMINATED = "terminated"
+
 
 class InformantType(str, Enum):
     """Who is physically providing the clinical history at the kiosk.
@@ -29,32 +31,37 @@ class InformantType(str, Enum):
     from the patient themselves — this field makes that distinction explicit
     in the audit trail.
     """
-    PATIENT = "patient"           # The patient is self-reporting
-    RELATIVE = "relative"         # A family member is reporting on their behalf
-    CAREGIVER = "caregiver"       # A professional caregiver (nurse, ASHA worker)
+
+    PATIENT = "patient"  # The patient is self-reporting
+    RELATIVE = "relative"  # A family member is reporting on their behalf
+    CAREGIVER = "caregiver"  # A professional caregiver (nurse, ASHA worker)
+
 
 class SessionState(BaseModel):
     """The root session state of a patient intake process."""
+
     session_id: UUID = Field(..., description="Unique identifier for the session.")
     patient_language: str = Field(..., description="Language code (e.g., 'en', 'hi').")
     created_at: datetime = Field(..., description="Session start time in UTC.")
     status: SessionStatus = Field(..., description="Current status of the session.")
     consent_status: bool = Field(False, description="Has the user given DPDP consent.")
-    intake_progress: float = Field(0.0, ge=0.0, le=1.0, description="Completion percentage (0.0 to 1.0).")
+    intake_progress: float = Field(
+        0.0, ge=0.0, le=1.0, description="Completion percentage (0.0 to 1.0)."
+    )
 
     # ── Enterprise: Proxy / Attendant Problem ──────────────────────────
     informant_type: InformantType = Field(
         InformantType.PATIENT,
         description="Who is physically providing the clinical history. "
-                    "Defaults to PATIENT (self-reporting). Set to RELATIVE or "
-                    "CAREGIVER when a proxy is answering on behalf of the patient."
+        "Defaults to PATIENT (self-reporting). Set to RELATIVE or "
+        "CAREGIVER when a proxy is answering on behalf of the patient.",
     )
     informant_relationship: str | None = Field(
         None,
         description="Relationship of the informant to the patient when "
-                    "informant_type is not PATIENT (e.g., 'spouse', 'son', "
-                    "'daughter', 'ASHA worker', 'parent'). Required when "
-                    "informant_type != PATIENT."
+        "informant_type is not PATIENT (e.g., 'spouse', 'son', "
+        "'daughter', 'ASHA worker', 'parent'). Required when "
+        "informant_type != PATIENT.",
     )
 
     # ── Enterprise: Acuity, Wayfinding & PM-JAY Billing ───────────────
@@ -65,8 +72,8 @@ class SessionState(BaseModel):
     )
     total_fees_inr: int = Field(0, description="Total fees in INR.")
 
-    @model_validator(mode='after')
-    def validate_proxy_relationship(self) -> 'SessionState':
+    @model_validator(mode="after")
+    def validate_proxy_relationship(self) -> "SessionState":
         """Enforce that proxy sessions always record who the proxy is."""
         if self.informant_type != InformantType.PATIENT and not self.informant_relationship:
             raise ValueError(
@@ -74,6 +81,7 @@ class SessionState(BaseModel):
                 f"is {self.informant_type.value!r} (not 'patient')"
             )
         return self
+
 
 # Example
 # {
@@ -97,6 +105,7 @@ Raw voice input data captured from the kiosk.
 ```python
 class VoiceCapture(BaseModel):
     """Represents a voice recording snippet from the patient."""
+
     session_id: UUID
     audio_ref: str = Field(..., description="Storage reference/path to the audio file.")
     transcript: str = Field(..., description="The ASR transcribed text.")
@@ -114,22 +123,22 @@ class VoiceCapture(BaseModel):
         None,
         ge=0.0,
         description="Words per minute in the captured audio segment. "
-                    "Normal adult range: 120-150 wpm. Values below 100 may "
-                    "indicate neurological conditions (bradyphrenia)."
+        "Normal adult range: 120-150 wpm. Values below 100 may "
+        "indicate neurological conditions (bradyphrenia).",
     )
     cough_events_detected: int = Field(
         0,
         ge=0,
         description="Number of cough events detected in the audio via "
-                    "acoustic classifier. Persistent coughing across multiple "
-                    "captures triggers a respiratory triage flag."
+        "acoustic classifier. Persistent coughing across multiple "
+        "captures triggers a respiratory triage flag.",
     )
     max_pause_duration_seconds: float | None = Field(
         None,
         ge=0.0,
         description="Longest contiguous silence/pause in the audio (seconds). "
-                    "Extended pauses (> 5s) may indicate confusion, distress, "
-                    "or difficulty understanding the question."
+        "Extended pauses (> 5s) may indicate confusion, distress, "
+        "or difficulty understanding the question.",
     )
 ```
 
@@ -146,6 +155,7 @@ class QuestionType(str, Enum):
     MULTI_CHOICE = "multi_choice"
     NUMERIC_SCALE = "numeric_scale"
 
+
 class ClinicalDomain(str, Enum):
     DEMOGRAPHICS = "demographics"
     CHIEF_COMPLAINT = "chief_complaint"
@@ -159,8 +169,10 @@ class ClinicalDomain(str, Enum):
     REVIEW_OF_SYSTEMS = "review_of_systems"
     DASHAVIDHA = "dashavidha"
 
+
 class IntakeQuestion(BaseModel):
     """A question generated for the patient."""
+
     question_text: str
     question_type: QuestionType
     choices: list[str] | None = None
@@ -179,12 +191,16 @@ class ResponseSource(str, Enum):
     TOUCH = "touch"
     TEXT = "text"
 
+
 class IntakeResponse(BaseModel):
     """A patient's answer to a question."""
+
     question_id: UUID
     response_text: str
     response_source: ResponseSource
-    extracted_data: dict = Field(default_factory=dict, description="Structured data parsed from response.")
+    extracted_data: dict = Field(
+        default_factory=dict, description="Structured data parsed from response."
+    )
 ```
 
 ## 5. IntakeSession
@@ -196,13 +212,14 @@ The complete state of the clinical interview.
 ```python
 class IntakeSession(BaseModel):
     """The aggregate state of the patient's intake interview."""
+
     session_id: UUID
     questions_asked: list[IntakeQuestion] = Field(default_factory=list)
     responses: list[IntakeResponse] = Field(default_factory=list)
     clinical_data: dict = Field(default_factory=dict)
     progress: float = Field(0.0, ge=0.0, le=1.0)
     is_complete: bool = False
-    triage_alerts: list['TriageAlert'] = Field(default_factory=list)
+    triage_alerts: list["TriageAlert"] = Field(default_factory=list)
 
     # ── Enterprise: Conversation Frustration Index (CFI) ───────────────
     # A running counter tracking communication breakdown signals. It
@@ -218,20 +235,20 @@ class IntakeSession(BaseModel):
         0,
         ge=0,
         description="Conversation Frustration Index. Increments on: "
-                    "low ASR confidence (< 0.4), repeated questions, "
-                    "long pauses (> 10s), explicit 'I don't understand'. "
-                    "Threshold for human fallback: 5."
+        "low ASR confidence (< 0.4), repeated questions, "
+        "long pauses (> 10s), explicit 'I don't understand'. "
+        "Threshold for human fallback: 5.",
     )
     frustration_threshold: int = Field(
         5,
         ge=1,
         description="CFI value at which the system stops the AI conversation "
-                    "and routes the patient to a human registration desk."
+        "and routes the patient to a human registration desk.",
     )
     human_fallback_triggered: bool = Field(
         False,
         description="Set to True when frustration_index >= frustration_threshold. "
-                    "Once True, no further AI questions are generated."
+        "Once True, no further AI questions are generated.",
     )
 ```
 
@@ -249,8 +266,10 @@ class DocumentType(str, Enum):
     REFERRAL = "referral"
     OTHER = "other"
 
+
 class DocumentScan(BaseModel):
     """A scanned physical medical document."""
+
     scan_id: UUID
     session_id: UUID
     document_type: DocumentType
@@ -275,6 +294,7 @@ class EntityType(str, Enum):
     ALLERGY = "allergy"
     SYMPTOM = "symptom"
 
+
 class CodeSystem(str, Enum):
     SNOMED_CT = "snomed_ct"
     ICD10 = "icd10"
@@ -282,8 +302,10 @@ class CodeSystem(str, Enum):
     ATC = "atc"
     NONE = "none"
 
+
 class MedicalEntity(BaseModel):
     """A structured medical entity extracted from text."""
+
     entity_id: UUID
     entity_type: EntityType
     text: str
@@ -305,10 +327,12 @@ Chronological record of the patient's medical history.
 ```python
 from datetime import date
 
+
 class EventSource(str, Enum):
     INTAKE = "intake"
     OCR = "ocr"
     HISTORY = "history"
+
 
 class TimelineEvent(BaseModel):
     date: date | None = None
@@ -316,8 +340,10 @@ class TimelineEvent(BaseModel):
     source: EventSource
     entities: list[MedicalEntity] = Field(default_factory=list)
 
+
 class ClinicalTimeline(BaseModel):
     """Chronological patient timeline built from intake and docs."""
+
     session_id: UUID
     events: list[TimelineEvent] = Field(default_factory=list)
 ```
@@ -334,8 +360,10 @@ class TriagePriority(str, Enum):
     URGENT = "urgent"
     NORMAL = "normal"
 
+
 class TriageAlert(BaseModel):
     """Alert indicating an emergency or urgent symptom."""
+
     alert_id: UUID
     priority: TriagePriority
     rule_name: str
@@ -356,13 +384,16 @@ class ConsentPurpose(str, Enum):
     DOCUMENT_DIGITIZATION = "document_digitization"
     ABDM_SHARE = "abdm_share"
 
+
 class VerificationMethod(str, Enum):
     TOUCH = "touch"
     BIOMETRIC = "biometric"
     VERBAL = "verbal"
 
+
 class ConsentRecord(BaseModel):
     """DPDP compliant consent record."""
+
     consent_id: UUID
     session_id: UUID
     purpose: ConsentPurpose
@@ -385,10 +416,14 @@ class SummarySection(BaseModel):
     content_en: str
     content_local: str
     clinical_domain: str
-    source_entities: list[UUID] = Field(default_factory=list, description="References to MedicalEntity.entity_id")
+    source_entities: list[UUID] = Field(
+        default_factory=list, description="References to MedicalEntity.entity_id"
+    )
+
 
 class ClinicalSummary(BaseModel):
     """A bilingual summary output for the clinician."""
+
     summary_id: UUID
     session_id: UUID
     sections: list[SummarySection] = Field(default_factory=list)
@@ -403,6 +438,7 @@ A validated FHIR R4 document.
 ```python
 class FHIRBundle(BaseModel):
     """Generated FHIR R4 Bundle resource."""
+
     bundle_id: UUID
     session_id: UUID
     bundle_json: dict = Field(..., description="The raw FHIR R4 JSON object.")
@@ -425,9 +461,9 @@ class FHIRBundle(BaseModel):
     source_transcript_hash: str = Field(
         ...,
         description="SHA-256 hash of all source transcripts and OCR text "
-                    "used to generate this bundle. Proves cryptographic "
-                    "linkage between raw patient input and FHIR output "
-                    "for medico-legal defence."
+        "used to generate this bundle. Proves cryptographic "
+        "linkage between raw patient input and FHIR output "
+        "for medico-legal defence.",
     )
 ```
 
@@ -440,6 +476,7 @@ Transmission wrapper for pushing to ABDM gateway.
 ```python
 class ABDMPayload(BaseModel):
     """Payload envelope for transmission to the ABDM gateway."""
+
     payload_id: UUID
     session_id: UUID
     consent_record_id: UUID
@@ -459,6 +496,7 @@ Evaluation metric for the AI evaluation harness.
 ```python
 class EvalResult(BaseModel):
     """Result from automated evaluation suite on a given scenario."""
+
     eval_id: UUID
     metric_name: str
     scenario_id: str
@@ -482,25 +520,27 @@ class AuditEventType(str, Enum):
     Events are append-only: no UPDATE, no DELETE on the events table. Ever.
     Payloads store hashes and references, never raw PHI.
     """
-    SESSION_CREATED     = "session_created"
-    LANGUAGE_SELECTED   = "language_selected"
-    INFORMANT_DECLARED  = "informant_declared"       # proxy/attendant set
-    CONSENT_GRANTED     = "consent_granted"
-    CONSENT_REVOKED     = "consent_revoked"
-    VOICE_CAPTURED      = "voice_captured"            # transcript hash, NOT transcript
-    QUESTION_GENERATED  = "question_generated"        # question text (not PHI)
-    RESPONSE_RECEIVED   = "response_received"         # response hash, NOT response text
-    BUTTON_TAPPED       = "button_tapped"             # UI element identifier
-    DOCUMENT_SCANNED    = "document_scanned"          # scan_id, doc_type
-    TRIAGE_ALERT_FIRED  = "triage_alert_fired"        # alert_id, priority
-    CFI_INCREMENTED     = "cfi_incremented"            # new CFI value + reason
-    HUMAN_FALLBACK      = "human_fallback_triggered"
-    SUMMARY_GENERATED   = "summary_generated"         # summary_id
-    FHIR_BUNDLE_CREATED = "fhir_bundle_created"       # bundle_id, transcript_hash
-    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"       # success/failure
-    SESSION_COMPLETED   = "session_completed"
-    WALK_AWAY_DETECTED  = "walk_away_detected"        # fires at 15s no-presence (the trigger)
-    SESSION_PURGED      = "session_purged"             # fires after purge completes (the effect)
+
+    SESSION_CREATED = "session_created"
+    LANGUAGE_SELECTED = "language_selected"
+    INFORMANT_DECLARED = "informant_declared"  # proxy/attendant set
+    CONSENT_GRANTED = "consent_granted"
+    CONSENT_REVOKED = "consent_revoked"
+    VOICE_CAPTURED = "voice_captured"  # transcript hash, NOT transcript
+    QUESTION_GENERATED = "question_generated"  # question text (not PHI)
+    RESPONSE_RECEIVED = "response_received"  # response hash, NOT response text
+    BUTTON_TAPPED = "button_tapped"  # UI element identifier
+    DOCUMENT_SCANNED = "document_scanned"  # scan_id, doc_type
+    TRIAGE_ALERT_FIRED = "triage_alert_fired"  # alert_id, priority
+    CFI_INCREMENTED = "cfi_incremented"  # new CFI value + reason
+    HUMAN_FALLBACK = "human_fallback_triggered"
+    SUMMARY_GENERATED = "summary_generated"  # summary_id
+    FHIR_BUNDLE_CREATED = "fhir_bundle_created"  # bundle_id, transcript_hash
+    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"  # success/failure
+    SESSION_COMPLETED = "session_completed"
+    WALK_AWAY_DETECTED = "walk_away_detected"  # fires at 15s no-presence (the trigger)
+    SESSION_PURGED = "session_purged"  # fires after purge completes (the effect)
+
 
 class AuditEvent(BaseModel):
     """A single immutable audit event in the medico-legal trail.
@@ -509,6 +549,7 @@ class AuditEvent(BaseModel):
     trigger both enforce that no UPDATE or DELETE is ever executed on the
     events table. tests/invariants/test_audit_trail.py verifies this.
     """
+
     event_id: UUID = Field(..., description="Unique identifier for this event.")
     session_id: UUID = Field(..., description="Session this event belongs to.")
     event_type: AuditEventType = Field(..., description="What happened.")
@@ -516,15 +557,16 @@ class AuditEvent(BaseModel):
     payload: dict = Field(
         default_factory=dict,
         description="Event-specific metadata. MUST NOT contain raw PHI. "
-                    "Use SHA-256 hashes for sensitive data (transcripts, responses). "
-                    "Use references (scan_id, alert_id) for linked entities."
+        "Use SHA-256 hashes for sensitive data (transcripts, responses). "
+        "Use references (scan_id, alert_id) for linked entities.",
     )
     sequence_number: int = Field(
         ...,
         ge=0,
         description="Monotonically increasing sequence number within the session. "
-                    "Guarantees total ordering of events for a single session."
+        "Guarantees total ordering of events for a single session.",
     )
+
 
 # Example
 # {
@@ -552,6 +594,7 @@ Golden Card PM-JAY eligibility verification outcome.
 ```python
 class PMJAYVerificationResult(BaseModel):
     """Result of PM-JAY golden card verification."""
+
     eligible: bool = Field(..., description="Whether beneficiary is PM-JAY eligible.")
     pmjay_id: str | None = Field(default=None, description="Beneficiary PM-JAY ID.")
     beneficiary_name: str | None = Field(default=None, description="Masked beneficiary name.")

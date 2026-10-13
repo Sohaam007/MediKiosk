@@ -397,9 +397,7 @@ def challenge_3_jwt_enforcement() -> None:
     # 3.B: Invalid signature raises HTTP 401
     invalid_sig_status: int | None = None
     with patch("medikiosk.api.dependencies.auth.get_settings") as mock_settings:
-        mock_settings.return_value = Settings(
-            api_key=test_secret, jwt_secret=test_secret
-        )
+        mock_settings.return_value = Settings(api_key=test_secret, jwt_secret=test_secret)
 
         forged_token = craft_jwt(
             header={"alg": "HS256", "typ": "JWT"},
@@ -418,9 +416,7 @@ def challenge_3_jwt_enforcement() -> None:
     # 3.C: Expired token raises HTTP 401
     expired_token_status: int | None = None
     with patch("medikiosk.api.dependencies.auth.get_settings") as mock_settings:
-        mock_settings.return_value = Settings(
-            api_key=test_secret, jwt_secret=test_secret
-        )
+        mock_settings.return_value = Settings(api_key=test_secret, jwt_secret=test_secret)
 
         expired_token = craft_jwt(
             header={"alg": "HS256", "typ": "JWT"},
@@ -439,9 +435,7 @@ def challenge_3_jwt_enforcement() -> None:
     # 3.D: Missing exp claim raises HTTP 401
     missing_exp_status: int | None = None
     with patch("medikiosk.api.dependencies.auth.get_settings") as mock_settings:
-        mock_settings.return_value = Settings(
-            api_key=test_secret, jwt_secret=test_secret
-        )
+        mock_settings.return_value = Settings(api_key=test_secret, jwt_secret=test_secret)
 
         no_exp_token = craft_jwt(
             header={"alg": "HS256", "typ": "JWT"},
@@ -456,9 +450,7 @@ def challenge_3_jwt_enforcement() -> None:
     # 3.E: Valid token with insufficient role raises HTTP 403
     forbidden_status: int | None = None
     with patch("medikiosk.api.dependencies.auth.get_settings") as mock_settings:
-        mock_settings.return_value = Settings(
-            api_key=test_secret, jwt_secret=test_secret
-        )
+        mock_settings.return_value = Settings(api_key=test_secret, jwt_secret=test_secret)
 
         valid_kiosk_token = craft_jwt(
             header={"alg": "HS256", "typ": "JWT"},
@@ -508,9 +500,7 @@ async def challenge_4_summary_hash_contract() -> None:
     print("=" * 80)
 
     class MockLLM(LLMPort):
-        async def generate(
-            self, prompt: str, system_prompt: str, temperature: float = 0.2
-        ) -> str:
+        async def generate(self, prompt: str, system_prompt: str, temperature: float = 0.2) -> str:
             return "Patient presents with clinical symptoms. Vitals stable."
 
     mock_summary_repo = AsyncMock(spec=SummaryRepository)
@@ -616,16 +606,11 @@ async def challenge_4_summary_hash_contract() -> None:
     # Test 4.C: Verify audit event emitted with transcript_hash
     audit_calls = mock_audit_repo.append.call_args_list
     fhir_audit_call = next(
-        (
-            c[0][0]
-            for c in audit_calls
-            if c[0][0].event_type == AuditEventType.FHIR_BUNDLE_CREATED
-        ),
+        (c[0][0] for c in audit_calls if c[0][0].event_type == AuditEventType.FHIR_BUNDLE_CREATED),
         None,
     )
     audit_has_exact_hash = (
-        fhir_audit_call is not None
-        and fhir_audit_call.payload.get("transcript_hash") == h
+        fhir_audit_call is not None and fhir_audit_call.payload.get("transcript_hash") == h
     )
 
     test_4_passed = (

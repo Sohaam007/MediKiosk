@@ -277,6 +277,181 @@ class SessionService:
         )
         return updated
 
+    async def select_doctor(
+        self,
+        session_id: uuid.UUID,
+        doctor_id: uuid.UUID,
+        *,
+        chamber_room: str | None = None,
+        consultation_fee: int = 0,
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Assign a doctor and optional chamber room to the session.
+
+        Args:
+            session_id: UUID of the session.
+            doctor_id: UUID of the chosen doctor.
+            chamber_room: Optional chamber/room number.
+            consultation_fee: Consultation fee in INR to add (if not cashless).
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState.
+        """
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updates: dict[str, object] = {
+            "selected_doctor_id": doctor_id,
+        }
+        if chamber_room:
+            updates["chamber_room"] = chamber_room
+        if consultation_fee > 0 and session.billing_status != "PMJAY_CASHLESS":
+            updates["total_fees_inr"] = session.total_fees_inr + consultation_fee
+
+        updated = session.model_copy(update=updates)
+        await self._session_repo.update(updated)
+
+        seq = await self._next_seq(session_id)
+        timestamp = now or datetime.now(UTC)
+        await self._audit_repo.append(
+            AuditEvent(
+                event_id=uuid.uuid4(),
+                session_id=session_id,
+                event_type=AuditEventType.BUTTON_TAPPED,
+                timestamp=timestamp,
+                sequence_number=seq,
+                payload={"element": "select_doctor", "doctor_id": str(doctor_id)},
+            )
+        )
+        log.info("doctor_selected_persisted", session_id=str(session_id), doctor_id=str(doctor_id))
+        return updated
+
+    async def select_packages(
+        self,
+        session_id: uuid.UUID,
+        package_ids: list[uuid.UUID],
+        *,
+        total_package_fee: int = 0,
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Assign health package IDs to the session.
+
+        Args:
+            session_id: UUID of the session.
+            package_ids: List of package UUIDs.
+            total_package_fee: Total package fees in INR to add (if not cashless).
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState.
+        """
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updates: dict[str, object] = {
+            "selected_package_ids": package_ids,
+        }
+        if total_package_fee > 0 and session.billing_status != "PMJAY_CASHLESS":
+            updates["total_fees_inr"] = session.total_fees_inr + total_package_fee
+
+        updated = session.model_copy(update=updates)
+        await self._session_repo.update(updated)
+
+        seq = await self._next_seq(session_id)
+        timestamp = now or datetime.now(UTC)
+        await self._audit_repo.append(
+            AuditEvent(
+                event_id=uuid.uuid4(),
+                session_id=session_id,
+                event_type=AuditEventType.BUTTON_TAPPED,
+                timestamp=timestamp,
+                sequence_number=seq,
+                payload={"element": "select_package", "package_count": len(package_ids)},
+            )
+        )
+        log.info("packages_selected_persisted", session_id=str(session_id), count=len(package_ids))
+        return updated
+
+    async def record_consent(
+        self,
+        session_id: uuid.UUID,
+        *,
+        source: str = "ABDM_SCAN_AND_SHARE",
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Record DPDP consent granted for the session.
+
+        Args:
+            session_id: UUID of the session.
+            source: Channel through which consent was authorized.
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState with consent_status=True.
+        """
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updated = session.model_copy(
+            update={
+                "consent_status": True,
+                "intake_progress": max(session.intake_progress, 0.2),
+            }
+        )
+        await self._session_repo.update(updated)
+
+        seq = await self._next_seq(session_id)
+        timestamp = now or datetime.now(UTC)
+        await self._audit_repo.append(
+            AuditEvent(
+                event_id=uuid.uuid4(),
+                session_id=session_id,
+                event_type=AuditEventType.CONSENT_GRANTED,
+                timestamp=timestamp,
+                sequence_number=seq,
+                payload={"source": source},
+            )
+        )
+
+        log.info(
+            "session_consent_recorded",
+            session_id=str(session_id),
+            source=source,
+        )
+        return updated
+
+    async def update_progress(
+        self,
+        session_id: uuid.UUID,
+        progress: float,
+        *,
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Update intake progress fraction [0.0, 1.0] for the session.
+
+        Args:
+            session_id: UUID of the session.
+            progress: Progress fraction between 0.0 and 1.0.
+            now: Optional injected UTC timestamp.
+
+        Returns:
+            The updated SessionState.
+        """
+        clamped_progress = max(0.0, min(1.0, progress))
+        session = await self.get_session(session_id)
+        if session.status == SessionStatus.TERMINATED:
+            raise SessionExpiredError(f"Session {session_id} has expired or was terminated")
+
+        updated = session.model_copy(
+            update={"intake_progress": max(session.intake_progress, clamped_progress)}
+        )
+        await self._session_repo.update(updated)
+        return updated
+
     async def record_patient_paged(
         self,
         session_id: uuid.UUID,

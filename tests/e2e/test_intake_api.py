@@ -53,3 +53,28 @@ def test_purge_nonexistent_session_returns_404(client_kiosk):
         "/api/session/purge", json={"session_id": random_uuid, "reason": "user_request"}
     )
     assert response.status_code == 404
+
+
+def test_respond_whitespace_only_text_returns_422(client_kiosk):
+    start_response = client_kiosk.post(
+        "/api/intake/start", json={"patient_language": "en", "tenant_id": "test_tenant"}
+    )
+    session_id = start_response.json()["session_id"]
+
+    response = client_kiosk.post(
+        "/api/intake/respond", json={"session_id": session_id, "response_text": "   "}
+    )
+    assert response.status_code == 422
+
+
+def test_respond_progress_advances(client_kiosk):
+    start_response = client_kiosk.post(
+        "/api/intake/start", json={"patient_language": "en", "tenant_id": "test_tenant"}
+    )
+    session_id = start_response.json()["session_id"]
+
+    response = client_kiosk.post(
+        "/api/intake/respond", json={"session_id": session_id, "response_text": "I feel dizzy"}
+    )
+    assert response.status_code == 200
+    assert response.json()["intake_progress"] > 0.0

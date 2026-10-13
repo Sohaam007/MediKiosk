@@ -3,7 +3,7 @@ import os
 import sys
 
 # Ensure src is in the path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 from medikiosk.adapters.database.engine import create_all_tables, get_engine
 from medikiosk.adapters.logging import get_logger
@@ -23,6 +23,7 @@ async def main():
     log.info("database_schema_provisioned")
     # Clean up engine
     await engine.dispose()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -56,7 +56,7 @@ medikiosk/
 │   ├── e2e/                           full API workflow tests
 │   └── invariants/                    architectural rule enforcement
 │
-├── frontend/                          Next.js 14+ (existing, for testing)
+├── frontend/                          React 18 + Vite PWA (Kiosk & Clinician consoles)
 │
 ├── eval/                              evaluation harness, corpora, metrics
 │   ├── corpora/                       synthetic patients, documents, audio
@@ -139,8 +139,8 @@ A module is deep when its public API is small but its internal implementation is
 # Good: deep module. One function, complex internals.
 # The caller does not know about LLM prompts, JSON parsing,
 # retry logic, or medical coding tables.
-def extract_entities(ocr_text: str, document_type: DocumentType) -> list[MedicalEntity]:
-    ...
+def extract_entities(ocr_text: str, document_type: DocumentType) -> list[MedicalEntity]: ...
+
 
 # Bad: shallow module. Every internal step is exposed.
 def find_drug_mentions(text: str) -> list[str]: ...
@@ -222,10 +222,146 @@ Patient arrives
          │
          ▼
 ┌─────────────────┐
-│  Session Purge  │  all patient data wiped from local storage
-│  (data_purged)  │  DPDP retention compliance
-└─────────────────┘
+│  (Session Purge)  │  all patient data wiped from local storage
+│  (data_purged)   │  DPDP retention compliance
+└──────────────────┘
 ```
+
+## Frontend component hierarchy & user journeys
+
+The MediKiosk frontend is structured as an offline-capable, high-accessibility Progressive Web Application (PWA) built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Vite**. The frontend contains two specialized operator experiences:
+1. **Patient Kiosk Intake (`KioskIntakeView`)**: An intuitive, voice-first, touch-optimized kiosk workflow for patients and attendants in hospital OPD reception areas.
+2. **Clinician Triage & Review Console (`ClinicianQueueView`)**: A clinician-facing cockpit delivering real-time patient queue visualization, automated triage red-flag alerts, live intake tracking, and chronological patient story timelines.
+
+```mermaid
+flowchart TD
+    subgraph FrontendApp ["Frontend Application (React 18 + Vite PWA)"]
+        App["App.tsx - Root View Switcher"]
+
+        subgraph KioskFlow ["Patient Intake Kiosk Flow (KioskIntakeView)"]
+            KioskStepper["KioskStepperHeader (6-Stage Stepper, Live Elapsed Timer, DPDP Reset)"]
+
+            subgraph IntakeStages ["6-Stage Intake Pipeline"]
+                Stage1["Stage 1: LanguageSelector (8 Indian Languages, Audio Guidance)"]
+                Stage2["Stage 2: Registration (Informant Selection & DPDP 2023 Consent)"]
+                Stage3["Stage 3: Conversational Voice Intake Chat"]
+                Stage4["Stage 4: DocumentScanner (Webcam Capture & File OCR)"]
+                Stage5["Stage 5: Doctor & Health Package Catalog (PM-JAY Badges)"]
+                Stage6["Stage 6: Completed Token Confirmation (Queue Token & Room Routing)"]
+            end
+
+            subgraph Stage3Subsystem ["Stage 3 Voice & Assistant Subsystem"]
+                AyushAvatar["AyushSahayakAvatar (5-State Animated AI Assistant Avatar)"]
+                QuickPills["Quick-Choice Symptom Pills (Bilingual Touch Chips)"]
+                VoiceHooks["useVoiceInput & useTTS Hooks (Web Speech API Recognition/Synthesis)"]
+                EmergencyModal["EmergencyAlertModal (Cardiac / Respiratory Red-Flag Modal)"]
+            end
+        end
+
+        subgraph ClinicianFlow ["Clinician Console Flow (ClinicianQueueView)"]
+            Sidebar["Clinician Sidebar (Dark Green #0F3E2E, ABDM Verified, Attending Profile)"]
+            ConsoleHeader["Console Header (Hospital Breadcrumb, Language Toggle, Notification Bell)"]
+            AlertBanner["Triage Red-Flag Alert Banner (Priority Review Action)"]
+            KPICards["4 Live KPI Metric Cards (Intakes, Avg Time, Docs, Red Flags)"]
+
+            subgraph ConsoleTabs ["Clinician Navigation Tabs"]
+                OverviewTab["Tab 1: Overview"]
+                LiveIntakeTab["Tab 2: Live Intake Queue Monitor"]
+                DocsTab["Tab 3: Processed Document Scans & OCR"]
+                ProfilesTab["Tab 4: Historical Patient Profiles"]
+                IntegrationsTab["Tab 5: Hospital EHR / HIS Integrations"]
+            end
+
+            subgraph OverviewSplit ["Overview Tab Split View"]
+                QueueList["Active Priority Queue List (Critical/Urgent Sorting, Wait Times)"]
+                LiveDetail["Live Intake & Patient Story Panel (Progress, Checklist, Timeline)"]
+            end
+        end
+
+        subgraph ClientLayer ["OpenAPI TypeScript Client SDK"]
+            SDK["OpenAPI SDK (client/sdk.gen.ts & types.gen.ts)"]
+            SSEHook["useQueueLive Hook (SSE Stream Listener)"]
+        end
+    end
+
+    subgraph BackendAPI ["MediKiosk FastAPI REST & SSE Services"]
+        AuthAPI["POST /api/auth/token"]
+        IntakeAPI["Intake API (/api/intake/*, /api/session/purge)"]
+        DocAPI["Document API (/api/documents/*)"]
+        ClinicianAPI["Clinician API (/api/clinician/*)"]
+        CatalogAPI["Catalog API (/api/doctors, /api/packages)"]
+        HealthAPI["Health Probe (/api/health)"]
+    end
+
+    App --> KioskFlow
+    App --> ClinicianFlow
+    KioskFlow --> KioskStepper
+    KioskStepper --> IntakeStages
+    Stage3 --> Stage3Subsystem
+    ClinicianFlow --> Sidebar
+    ClinicianFlow --> ConsoleHeader
+    ClinicianFlow --> AlertBanner
+    ClinicianFlow --> KPICards
+    ClinicianFlow --> ConsoleTabs
+    OverviewTab --> OverviewSplit
+
+    KioskFlow --> SDK
+    ClinicianFlow --> SDK
+    ClinicianFlow --> SSEHook
+    SDK --> BackendAPI
+    SSEHook --> ClinicianAPI
+```
+
+### Component Breakdown & Responsibilities
+
+| Component | Path | Key Capabilities |
+|---|---|---|
+| **`KioskIntakeView`** | `frontend/src/views/KioskIntakeView.tsx` | Manages 6-stage intake flow, session lifecycle, informant selection, voice chat turn progression, and doctor/package selection. |
+| **`ClinicianQueueView`** | `frontend/src/views/ClinicianQueueView.tsx` | Pixel-level parity with hospital console: dark green `#0F3E2E` sidebar, St. Ananya Hospital header, triage red-flag banner, 4 KPI cards, live checklist, and patient story clinical timeline. |
+| **`AyushSahayakAvatar`** | `frontend/src/components/AyushSahayakAvatar.tsx` | 5 animated visual states (`idle`, `listening`, `thinking`, `speaking`, `alert`), mute/unmute audio toggle, regional voice guidance, and quick-choice symptom pills. |
+| **`DocumentScanner`** | `frontend/src/components/DocumentScanner.tsx` | Camera snapshot capture with `facingMode: 'environment'`, canvas snapshot extraction, and drag-and-drop prescription OCR preview. |
+| **`KioskStepperHeader`** | `frontend/src/components/KioskStepperHeader.tsx` | 6-stage intake step progression header, live elapsed session timer, national emergency hotline banner (`108`/`112`), and instant DPDP walk-away reset. |
+| **`LanguageSelector`** | `frontend/src/components/LanguageSelector.tsx` | Multilingual language grid covering 8 scheduled Indian languages with audio sample previews. |
+| **`EmergencyAlertModal`** | `frontend/src/components/EmergencyAlertModal.tsx` | High-priority modal surfaced upon cardiac or respiratory distress keywords, requiring clinician override or explicit staff acknowledgment. |
+| **`useVoiceInput`** | `frontend/src/hooks/useVoiceInput.ts` | Continuous and interim Web Speech API speech recognition with configurable silence timers and locale switching. |
+| **`useTTS`** | `frontend/src/hooks/useTTS.ts` | Web Speech API speech synthesis with regional voice discovery, speech cancellation, and playback state tracking. |
+| **`useQueueLive`** | `frontend/src/hooks/useQueueLive.ts` | Server-Sent Events (SSE) hook maintaining live waiting room queue state with auto-reconnect logic. |
+
+---
+
+## API routing architecture & endpoint directory
+
+The backend is exposed via a thin FastAPI gateway (`src/medikiosk/api/routes/`). All controllers delegate orchestration to application services (`src/medikiosk/services/`) and enforce role-based access control (RBAC), strict Pydantic schema validation, and Zero-PHI logging standards.
+
+### Complete API Routing Table
+
+| Method | Endpoint Path | Service / Delegate | Request Schema | Response Schema | RBAC Role Required | Description & PHI Guardrails |
+|---|---|---|---|---|---|---|
+| `POST` | `/api/auth/token` | Auth Service / HS256 | `TokenRequest` | `TokenResponse` | Public / System | Issues signed HS256 JWT (1h TTL). Validates role against `ALLOWED_ROLES`. |
+| `GET` | `/api/health` | Engine Probe | None | `dict[str, str]` | Public | Lightweight liveness probe verifying PostgreSQL/SQLite connectivity. Zero PHI. |
+| `POST` | `/api/intake/start` | `SessionService`, `IntakeService` | `StartSessionRequest` | `StartSessionResponse` | `Kiosk_Device`, `Triage_Nurse` | Initiates new multi-tenant intake session. Returns opaque `session_id`. Zero PHI in response. |
+| `POST` | `/api/intake/respond` | `IntakeService`, `SessionService` | `RespondRequest` | `RespondResponse` | `Kiosk_Device`, `Triage_Nurse` | Processes patient voice/text response, evaluates triage red-flags, updates progress. `response_text` is PHI: NEVER logged. |
+| `POST` | `/api/session/purge` | `SessionService`, `IntakeService` | `PurgeRequest` | `PurgeResponse` | `Kiosk_Device`, `Triage_Nurse` | Irreversible DPDP hard-delete of session data, evicts cached transcripts, deletes uploaded scans/audio, appends audit event. |
+| `POST` | `/api/intake/verify-pmjay` | `PMJAYEligibilityPort`, `SessionService` | `VerifyPMJAYRequest` | `PMJAYVerificationResult` | `Kiosk_Device`, `Triage_Nurse` | NHA Golden Card verification; switches billing status to `PMJAY_CASHLESS` with ₹0 fees. Exception logging sanitised. |
+| `POST` | `/api/documents/upload` | `OCRService`, `DocumentRepository` | Multipart Form (`file`, `session_id`, `document_type`) | `DocumentScan` | `Kiosk_Device`, `Triage_Nurse`, `Attending_Physician` | Uploads prescription/document (JPEG, PNG, WebP, PDF <= 10MB), runs OCR extraction. |
+| `GET` | `/api/documents/session/{session_id}` | `DocumentRepository` | Path: `session_id` | `list[DocumentScan]` | `Kiosk_Device`, `Triage_Nurse`, `Attending_Physician` | Retrieves all OCR document scans associated with the given session UUID. |
+| `GET` | `/api/clinician/queue` | `SessionService`, `CachePort` | Query: `department_id` | `QueueResponse` | `Triage_Nurse`, `Attending_Physician` | Department triage queue snapshot sorted by priority (`critical` > `urgent` > `normal`) and wait time. No raw patient names/PHI in response. |
+| `GET` | `/api/clinician/queue/live` | `SessionService`, `CachePort` | Query: `department_id` | SSE: `text/event-stream` (`queue_state`) | `Triage_Nurse`, `Attending_Physician` | Real-time Server-Sent Events stream for clinician queue updates every 10s. |
+| `POST` | `/api/clinician/queue/page-patient` | `NotificationPort`, `SessionService` | `PagePatientRequest` | `PagePatientResponse` | `Triage_Nurse`, `Attending_Physician` | Paging alert via bilingual SMS/WhatsApp paging to virtual waiting room; logs `PATIENT_PAGED` audit event. |
+| `GET` | `/api/clinician/overview` | `SessionService` | None | `ClinicianOverviewResponse` | `Triage_Nurse`, `Attending_Physician` | Dashboard KPI summary metrics (intakes completed, avg intake time, docs processed, red flags caught) & active red-flags. |
+| `GET` | `/api/clinician/session/{session_id}` | `SessionService`, `CachePort` | Path: `session_id` | `ClinicianSessionDetailResponse` | `Triage_Nurse`, `Attending_Physician` | Full patient intake summary, token number, wait time, chief complaint, triage alerts, and clinical timeline story. |
+| `GET` | `/api/doctors` | `DoctorRepository` | Query: `department`, `language` | `DoctorListResponse` | `Kiosk_Device`, `Triage_Nurse`, `Attending_Physician` | Lists available OPD doctors with credentials, seniority, consultation fees, and PM-JAY acceptance. |
+| `POST` | `/api/intake/select-doctor` | `DoctorRepository` | `SelectDoctorRequest` | `SelectDoctorResponse` | `Kiosk_Device`, `Triage_Nurse`, `Attending_Physician` | Associates chosen consulting doctor with the intake session. |
+| `GET` | `/api/packages` | `PackageCatalogPort` | Query: `department`, `category` | `PackageListResponse` | `Kiosk_Device`, `Triage_Nurse`, `Attending_Physician` | Lists tiered hospital health packages with prices and PM-JAY coverage flags. |
+| `POST` | `/api/intake/select-package` | `PackageCatalogPort` | `SelectPackageRequest` | `SelectPackageResponse` | `Kiosk_Device`, `Triage_Nurse`, `Attending_Physician` | Selects one or more health packages for the intake session. |
+
+### Clean Architecture & Zero-PHI Guardrails
+
+1. **Thin Controller Boundary**: Route handlers in `src/medikiosk/api/routes/` are strictly thin adapters. They validate incoming request schemas, resolve dependencies via FastAPI `Depends`, delegate execution to `services/`, and return typed Pydantic responses. No business logic, clinical calculations, or SQL queries exist in route functions.
+2. **Zero-PHI Logging Guarantee**: Structured logging via `structlog` records only opaque references (`session_id`, `scan_id`, `department_id`, `event_type`). Raw patient responses (`response_text`), names, phone numbers, and unmasked identifiers are **never** logged.
+3. **DPDP Ephemeral Data Purge**: In compliance with DPDP Act 2023 § 8(7), calling `/api/session/purge` triggers a hard-delete in the SQL persistence layer, evicts cached transcripts from Redis, removes temporary OCR scan/audio files from disk, and appends a tamper-evident audit record (`SESSION_PURGED`) containing only the timestamp and session UUID.
+
+---
 
 ## The consent chokepoint
 
@@ -425,25 +561,25 @@ every interaction.
 
 ```python
 class AuditEventType(str, Enum):
-    SESSION_CREATED     = "session_created"
-    LANGUAGE_SELECTED   = "language_selected"
-    INFORMANT_DECLARED  = "informant_declared"       # proxy/attendant set
-    CONSENT_GRANTED     = "consent_granted"
-    CONSENT_REVOKED     = "consent_revoked"
-    VOICE_CAPTURED      = "voice_captured"            # transcript hash, NOT transcript
-    QUESTION_GENERATED  = "question_generated"        # question text
-    RESPONSE_RECEIVED   = "response_received"         # response hash, NOT response text
-    BUTTON_TAPPED       = "button_tapped"             # UI element identifier
-    DOCUMENT_SCANNED    = "document_scanned"          # scan_id, doc_type
-    TRIAGE_ALERT_FIRED  = "triage_alert_fired"        # alert_id, priority
-    CFI_INCREMENTED     = "cfi_incremented"            # new CFI value + reason
-    HUMAN_FALLBACK      = "human_fallback_triggered"
-    SUMMARY_GENERATED   = "summary_generated"         # summary_id
-    FHIR_BUNDLE_CREATED = "fhir_bundle_created"       # bundle_id, transcript_hash
-    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"       # success/failure
-    SESSION_COMPLETED   = "session_completed"
-    WALK_AWAY_DETECTED  = "walk_away_detected"        # fires at 15s no-presence (the trigger)
-    SESSION_PURGED      = "session_purged"             # fires after purge completes (the effect)
+    SESSION_CREATED = "session_created"
+    LANGUAGE_SELECTED = "language_selected"
+    INFORMANT_DECLARED = "informant_declared"  # proxy/attendant set
+    CONSENT_GRANTED = "consent_granted"
+    CONSENT_REVOKED = "consent_revoked"
+    VOICE_CAPTURED = "voice_captured"  # transcript hash, NOT transcript
+    QUESTION_GENERATED = "question_generated"  # question text
+    RESPONSE_RECEIVED = "response_received"  # response hash, NOT response text
+    BUTTON_TAPPED = "button_tapped"  # UI element identifier
+    DOCUMENT_SCANNED = "document_scanned"  # scan_id, doc_type
+    TRIAGE_ALERT_FIRED = "triage_alert_fired"  # alert_id, priority
+    CFI_INCREMENTED = "cfi_incremented"  # new CFI value + reason
+    HUMAN_FALLBACK = "human_fallback_triggered"
+    SUMMARY_GENERATED = "summary_generated"  # summary_id
+    FHIR_BUNDLE_CREATED = "fhir_bundle_created"  # bundle_id, transcript_hash
+    ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"  # success/failure
+    SESSION_COMPLETED = "session_completed"
+    WALK_AWAY_DETECTED = "walk_away_detected"  # fires at 15s no-presence (the trigger)
+    SESSION_PURGED = "session_purged"  # fires after purge completes (the effect)
     # Note: WALK_AWAY_DETECTED and SESSION_PURGED are two sequential events.
     # First the detection fires, then the purge operation runs, then SESSION_PURGED
     # confirms the purge completed. If the purge fails, only WALK_AWAY_DETECTED exists.

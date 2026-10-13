@@ -45,11 +45,11 @@ can wait in the canteen or car park instead of a crowded lobby.
 #### `SessionState` (`domain/contracts/session.py`)
 Add the following fields (all optional, set during session close):
 ```python
-mobile_number: str | None = None          # E.164 format (+91XXXXXXXXXX)
-token_number: str | None = None           # e.g. "OPD-142"
-predicted_wait_seconds: int | None = None # ML-predicted wait at token assignment
-actual_wait_seconds: int | None = None    # Measured at doctor entry — for model training
-queue_position: int | None = None        # Live queue rank (updated as queue advances)
+mobile_number: str | None = None  # E.164 format (+91XXXXXXXXXX)
+token_number: str | None = None  # e.g. "OPD-142"
+predicted_wait_seconds: int | None = None  # ML-predicted wait at token assignment
+actual_wait_seconds: int | None = None  # Measured at doctor entry — for model training
+queue_position: int | None = None  # Live queue rank (updated as queue advances)
 waiting_room_status: WaitingRoomStatus | None = None  # see new enum below
 ```
 
@@ -75,9 +75,9 @@ class QueueEntry(BaseModel):
     triage_priority: TriagePriority
     assigned_at: datetime
     predicted_wait_seconds: int
-    mobile_number: str | None   # redacted in logs
+    mobile_number: str | None  # redacted in logs
     status: WaitingRoomStatus
-    department: str             # e.g. "OPD-General", "OPD-Cardiology"
+    department: str  # e.g. "OPD-General", "OPD-Cardiology"
 ```
 
 #### New Contract: `WaitTimeUpdate` (`domain/contracts/queue.py`)
@@ -89,7 +89,7 @@ class WaitTimeUpdate(BaseModel):
     updated_predicted_wait_seconds: int
     queue_position: int
     updated_at: datetime
-    trigger: str   # "new_patient_added" | "case_upgraded" | "doctor_speed_change"
+    trigger: str  # "new_patient_added" | "case_upgraded" | "doctor_speed_change"
 ```
 
 ### Required New Ports
@@ -158,17 +158,18 @@ class DisplayEventType(str, Enum):
     EMERGENCY_BANNER = "emergency_banner"
     DEPARTMENT_STATUS = "department_status"
 
+
 class DisplayEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     event_id: UUID
     event_type: DisplayEventType
     department: str
-    token_number: str | None = None          # shown on screen
-    patient_initial: str | None = None       # e.g. "S." — never full name
+    token_number: str | None = None  # shown on screen
+    patient_initial: str | None = None  # e.g. "S." — never full name
     queue_length: int | None = None
     average_wait_seconds: int | None = None
-    banner_text: str | None = None           # for EMERGENCY_BANNER events
+    banner_text: str | None = None  # for EMERGENCY_BANNER events
     timestamp: datetime
 ```
 
@@ -222,7 +223,7 @@ to reduce wait time and resource waste.
 #### New Enum in `SessionState` (`domain/contracts/session.py`)
 ```python
 class DiversionType(str, Enum):
-    NONE = "none"                   # no diversion offered
+    NONE = "none"  # no diversion offered
     TELEHEALTH_OFFERED = "telehealth_offered"
     TELEHEALTH_ACCEPTED = "telehealth_accepted"
     TELEHEALTH_DECLINED = "telehealth_declined"
@@ -243,9 +244,9 @@ class TelehealthSession(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     telehealth_id: UUID
-    session_id: UUID                  # parent MediKiosk session
-    video_room_url: str               # Jitsi/Daily.co/Twilio Video room URL
-    doctor_id: str | None = None      # assigned remote doctor
+    session_id: UUID  # parent MediKiosk session
+    video_room_url: str  # Jitsi/Daily.co/Twilio Video room URL
+    doctor_id: str | None = None  # assigned remote doctor
     scheduled_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None
@@ -258,7 +259,7 @@ class TelehealthSession(BaseModel):
 #### `ports/telehealth.py`
 ```python
 class TelehealthPort(Protocol):
-    async def create_room(self, session_id: UUID) -> str: ...    # returns room URL
+    async def create_room(self, session_id: UUID) -> str: ...  # returns room URL
     async def end_room(self, telehealth_id: UUID) -> None: ...
     async def get_available_doctors(self) -> list[str]: ...
 ```
@@ -321,12 +322,14 @@ class InsuranceScheme(str, Enum):
     PRIVATE = "private"
     NONE = "none"
 
+
 class EligibilityStatus(str, Enum):
     ELIGIBLE = "eligible"
     NOT_ELIGIBLE = "not_eligible"
     PARTIALLY_ELIGIBLE = "partially_eligible"
     PENDING_VERIFICATION = "pending_verification"
     ERROR = "error"
+
 
 class BillingEligibility(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -336,17 +339,17 @@ class BillingEligibility(BaseModel):
     abha_id: str | None = None
     scheme: InsuranceScheme
     status: EligibilityStatus
-    remaining_cover_inr: float | None = None    # e.g. 450000.0 (₹4.5 lakh remaining)
-    hbp_code: str | None = None                 # Health Benefit Package code
+    remaining_cover_inr: float | None = None  # e.g. 450000.0 (₹4.5 lakh remaining)
+    hbp_code: str | None = None  # Health Benefit Package code
     hbp_description: str | None = None
     verified_at: datetime
-    raw_gateway_response_hash: str              # SHA-256 of raw gateway JSON (audit)
+    raw_gateway_response_hash: str  # SHA-256 of raw gateway JSON (audit)
     error_message: str | None = None
 ```
 
 #### `SessionState` additions (`domain/contracts/session.py`)
 ```python
-billing_eligibility_id: UUID | None = None   # FK to BillingEligibility
+billing_eligibility_id: UUID | None = None  # FK to BillingEligibility
 ```
 
 ### Required New Ports
@@ -354,9 +357,7 @@ billing_eligibility_id: UUID | None = None   # FK to BillingEligibility
 #### `ports/insurance.py`
 ```python
 class InsurancePort(Protocol):
-    async def check_pmjay_eligibility(
-        self, abha_id: str, hbp_code: str
-    ) -> BillingEligibility: ...
+    async def check_pmjay_eligibility(self, abha_id: str, hbp_code: str) -> BillingEligibility: ...
 
     async def check_private_eligibility(
         self, policy_number: str, insurer_code: str, procedure_code: str
@@ -414,6 +415,7 @@ class MetricPeriod(str, Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
 
+
 class AnalyticsSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -427,7 +429,7 @@ class AnalyticsSnapshot(BaseModel):
     total_sessions: int
     completed_sessions: int
     abandoned_sessions: int
-    cfi_average: float              # average Conversation Frustration Index
+    cfi_average: float  # average Conversation Frustration Index
 
     # Triage distribution
     critical_count: int
@@ -436,7 +438,7 @@ class AnalyticsSnapshot(BaseModel):
 
     # Wait times (seconds)
     average_wait_seconds: float
-    p90_wait_seconds: float         # 90th percentile wait (key SLA metric)
+    p90_wait_seconds: float  # 90th percentile wait (key SLA metric)
     max_wait_seconds: float
 
     # Diversion
@@ -518,6 +520,7 @@ class DoctorSeniorityTier(str, Enum):
     HOD = "hod"
     CHAIRMAN = "chairman"
 
+
 class DoctorAvailabilityStatus(str, Enum):
     AVAILABLE = "available"
     IN_CONSULTATION = "in_consultation"
@@ -525,30 +528,31 @@ class DoctorAvailabilityStatus(str, Enum):
     ON_LEAVE = "on_leave"
     OFF_HOURS = "off_hours"
 
+
 class DoctorProfile(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     doctor_id: UUID
     full_name: str
-    degrees: list[str]                       # ["MBBS", "MD", "DM (Cardiology)", "FRCS"]
-    department: str                          # "Cardiology", "General Medicine", "AYUSH"
-    sub_speciality: str | None = None        # "Interventional Cardiology", "Heart Failure"
-    clinical_interests: list[str] = []       # ["Heart Failure", "Arrhythmia", "Pediatric Cardiology"]
+    degrees: list[str]  # ["MBBS", "MD", "DM (Cardiology)", "FRCS"]
+    department: str  # "Cardiology", "General Medicine", "AYUSH"
+    sub_speciality: str | None = None  # "Interventional Cardiology", "Heart Failure"
+    clinical_interests: list[str] = []  # ["Heart Failure", "Arrhythmia", "Pediatric Cardiology"]
     experience_years: int
-    languages: list[str]                     # ["en", "hi", "kn", "bn"]
+    languages: list[str]  # ["en", "hi", "kn", "bn"]
     seniority_tier: DoctorSeniorityTier
-    rating: float | None = None              # aggregate e.g. 4.9
+    rating: float | None = None  # aggregate e.g. 4.9
     review_count: int = 0
-    consultation_fee_inr: float              # OPD consultation fee
-    registration_fee_inr: float = 100.0      # one-time UHID creation fee
-    followup_free_days: int = 7              # 7 or 14 day free follow-up window
+    consultation_fee_inr: float  # OPD consultation fee
+    registration_fee_inr: float = 100.0  # one-time UHID creation fee
+    followup_free_days: int = 7  # 7 or 14 day free follow-up window
     pmjay_accepted: bool = False
-    tpa_insurers_accepted: list[str] = []    # ["Star Health", "ICICI Lombard"]
-    chamber_room: str | None = None          # "Room 204, Tower B, 2nd Floor"
+    tpa_insurers_accepted: list[str] = []  # ["Star Health", "ICICI Lombard"]
+    chamber_room: str | None = None  # "Room 204, Tower B, 2nd Floor"
     availability_status: DoctorAvailabilityStatus = DoctorAvailabilityStatus.OFF_HOURS
-    opd_start_time: str | None = None        # "09:00" (24h format)
-    opd_end_time: str | None = None          # "14:00"
-    profile_image_ref: str | None = None     # storage key (never PHI)
+    opd_start_time: str | None = None  # "09:00" (24h format)
+    opd_end_time: str | None = None  # "14:00"
+    profile_image_ref: str | None = None  # storage key (never PHI)
 ```
 
 #### `SessionState` additions (`domain/contracts/session.py`)
@@ -562,7 +566,9 @@ selected_doctor_id: UUID | None = None
 ```python
 class DoctorRepository(Protocol):
     async def get_doctor(self, doctor_id: UUID) -> DoctorProfile | None: ...
-    async def list_by_department(self, department: str, language: str | None = None) -> list[DoctorProfile]: ...
+    async def list_by_department(
+        self, department: str, language: str | None = None
+    ) -> list[DoctorProfile]: ...
     async def list_available(self, department: str) -> list[DoctorProfile]: ...
     async def check_followup_eligibility(self, phone_or_uhid: str, doctor_id: UUID) -> bool: ...
 ```
@@ -607,23 +613,24 @@ class PackageCategory(str, Enum):
     AYUSH_HOLISTIC = "ayush_holistic"
     GENERAL_CHECKUP = "general_checkup"
 
+
 class HospitalPackage(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     package_id: UUID
-    title: str                                # "Healthy Heart Check"
+    title: str  # "Healthy Heart Check"
     category: PackageCategory
-    description: str                          # marketing blurb
-    inclusions: list[str]                     # ["ECG", "Lipid Profile", "Troponin-T", "Cardiologist Review"]
-    lab_tests: list[str]                      # LOINC codes where available
-    target_symptoms: list[str]                # symptom keywords that trigger suggestion
-    target_age_min: int | None = None         # e.g. 60 for senior packages
+    description: str  # marketing blurb
+    inclusions: list[str]  # ["ECG", "Lipid Profile", "Troponin-T", "Cardiologist Review"]
+    lab_tests: list[str]  # LOINC codes where available
+    target_symptoms: list[str]  # symptom keywords that trigger suggestion
+    target_age_min: int | None = None  # e.g. 60 for senior packages
     target_age_max: int | None = None
     price_inr: float
     discounted_price_inr: float | None = None
     pmjay_covered: bool = False
-    department: str                           # which department fulfills this
-    turnaround_hours: int = 24                # expected result delivery time
+    department: str  # which department fulfills this
+    turnaround_hours: int = 24  # expected result delivery time
     is_active: bool = True
 ```
 
@@ -637,9 +644,13 @@ selected_package_ids: list[UUID] = []
 #### `ports/package.py`
 ```python
 class PackageCatalogPort(Protocol):
-    async def list_packages(self, department: str | None = None, category: PackageCategory | None = None) -> list[HospitalPackage]: ...
+    async def list_packages(
+        self, department: str | None = None, category: PackageCategory | None = None
+    ) -> list[HospitalPackage]: ...
     async def get_package(self, package_id: UUID) -> HospitalPackage | None: ...
-    async def suggest_packages(self, chief_complaint: str, patient_age: int | None = None) -> list[HospitalPackage]: ...
+    async def suggest_packages(
+        self, chief_complaint: str, patient_age: int | None = None
+    ) -> list[HospitalPackage]: ...
 ```
 
 ### Required New Adapters (future)
@@ -679,15 +690,17 @@ class PaymentStatus(str, Enum):
     PAID_UPI = "paid_upi"
     PAID_CARD = "paid_card"
     PAID_CASH = "paid_cash"
-    WAIVED_EMERGENCY = "waived_emergency"     # CRITICAL triage bypasses billing
+    WAIVED_EMERGENCY = "waived_emergency"  # CRITICAL triage bypasses billing
     WAIVED_PMJAY = "waived_pmjay"
     DEFERRED_CASH_COUNTER = "deferred_cash_counter"
+
 
 class BillingType(str, Enum):
     GENERAL_OPD = "general_opd"
     PMJAY_CASHLESS = "pmjay_cashless"
     TPA_CASHLESS = "tpa_cashless"
     EMERGENCY_WAIVER = "emergency_waiver"
+
 
 class ConsultationBill(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -697,15 +710,15 @@ class ConsultationBill(BaseModel):
     billing_type: BillingType
     registration_fee_inr: float = 0.0
     consultation_fee_inr: float = 0.0
-    package_fees_inr: float = 0.0             # sum of selected packages
+    package_fees_inr: float = 0.0  # sum of selected packages
     pmjay_deduction_inr: float = 0.0
     tpa_deduction_inr: float = 0.0
-    total_due_inr: float                      # after all deductions
+    total_due_inr: float  # after all deductions
     payment_status: PaymentStatus = PaymentStatus.PENDING
     upi_transaction_id: str | None = None
     upi_qr_expiry: datetime | None = None
     paid_at: datetime | None = None
-    cash_counter_barcode: str | None = None   # barcode string for deferred payment
+    cash_counter_barcode: str | None = None  # barcode string for deferred payment
 ```
 
 #### New Contract: `PaymentTransaction` (`domain/contracts/billing.py`)
@@ -716,9 +729,9 @@ class PaymentTransaction(BaseModel):
     transaction_id: UUID
     bill_id: UUID
     amount_inr: float
-    payment_method: PaymentStatus              # reuse enum for method
+    payment_method: PaymentStatus  # reuse enum for method
     upi_reference: str | None = None
-    gateway_response_hash: str                 # SHA-256 of gateway response
+    gateway_response_hash: str  # SHA-256 of gateway response
     verified_at: datetime
 ```
 
@@ -727,7 +740,9 @@ class PaymentTransaction(BaseModel):
 #### `ports/payment.py`
 ```python
 class PaymentGatewayPort(Protocol):
-    async def generate_upi_qr(self, bill_id: UUID, amount_inr: float, expiry_seconds: int = 180) -> str: ...  # returns QR data URI
+    async def generate_upi_qr(
+        self, bill_id: UUID, amount_inr: float, expiry_seconds: int = 180
+    ) -> str: ...  # returns QR data URI
     async def verify_payment(self, upi_reference: str) -> PaymentTransaction | None: ...
     async def generate_cash_counter_barcode(self, bill_id: UUID) -> str: ...
 ```
@@ -769,28 +784,29 @@ Apollo Qwaiting kiosks. Dynamic acuity-weighted token system.
 *(Replaces the simpler `QueueEntry` from Feature 1)*
 ```python
 class TokenPriority(str, Enum):
-    EMERGENCY = "E"    # from TriagePriority.CRITICAL
-    URGENT = "U"       # from TriagePriority.URGENT
-    ROUTINE = "R"      # from TriagePriority.NORMAL
+    EMERGENCY = "E"  # from TriagePriority.CRITICAL
+    URGENT = "U"  # from TriagePriority.URGENT
+    ROUTINE = "R"  # from TriagePriority.NORMAL
+
 
 class QueueToken(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     token_id: UUID
     session_id: UUID
-    token_string: str                         # e.g. "CARD-R-14"
+    token_string: str  # e.g. "CARD-R-14"
     department: str
-    department_code: str                      # e.g. "CARD" for Cardiology
+    department_code: str  # e.g. "CARD" for Cardiology
     priority: TokenPriority
-    sequence_number: int                      # within department+priority for the day
-    doctor_id: UUID | None = None             # assigned doctor (from Feature 6)
-    chamber_room: str | None = None           # "Room 204, Tower B"
+    sequence_number: int  # within department+priority for the day
+    doctor_id: UUID | None = None  # assigned doctor (from Feature 6)
+    chamber_room: str | None = None  # "Room 204, Tower B"
     estimated_wait_seconds: int
     queue_position: int
     issued_at: datetime
-    called_at: datetime | None = None         # when the doctor calls this token
-    seen_at: datetime | None = None           # when patient enters chamber
-    status: WaitingRoomStatus                 # from existing Feature 1 enum
+    called_at: datetime | None = None  # when the doctor calls this token
+    seen_at: datetime | None = None  # when patient enters chamber
+    status: WaitingRoomStatus  # from existing Feature 1 enum
 ```
 
 ### Required New Ports
@@ -799,7 +815,13 @@ class QueueToken(BaseModel):
 *(QueuePort from Feature 1 should be renamed to QueueOrchestratorPort and gain these methods)*
 ```python
 class QueueOrchestratorPort(Protocol):
-    async def issue_token(self, session_id: UUID, department: str, priority: TokenPriority, doctor_id: UUID | None = None) -> QueueToken: ...
+    async def issue_token(
+        self,
+        session_id: UUID,
+        department: str,
+        priority: TokenPriority,
+        doctor_id: UUID | None = None,
+    ) -> QueueToken: ...
     async def get_position(self, session_id: UUID) -> int: ...
     async def get_predicted_wait(self, session_id: UUID) -> int: ...
     async def call_next(self, department: str) -> QueueToken | None: ...
@@ -837,10 +859,10 @@ class WayfindingRoute(BaseModel):
 
     route_id: UUID
     session_id: UUID
-    from_location: str                        # "Kiosk-A, Ground Floor, Main Lobby"
-    to_location: str                          # "Room 312, Tower B, 3rd Floor"
-    directions_text: str                      # human-readable turn-by-turn
-    floor_plan_ref: str | None = None         # storage key for 2D map image
+    from_location: str  # "Kiosk-A, Ground Floor, Main Lobby"
+    to_location: str  # "Room 312, Tower B, 3rd Floor"
+    directions_text: str  # human-readable turn-by-turn
+    floor_plan_ref: str | None = None  # storage key for 2D map image
     estimated_walk_minutes: int
     generated_at: datetime
 ```
@@ -885,7 +907,9 @@ ABHA_IDENTITY_SHARE = "abha_identity_share"
 #### `ports/abdm.py` (Additions to existing `ABDMGateway`)
 ```python
 async def generate_abha_scan_qr(self, session_id: UUID) -> str: ...  # returns QR data
-async def receive_abha_callback(self, callback_data: dict[str, object]) -> dict[str, str]: ...  # returns demographic fields
+async def receive_abha_callback(
+    self, callback_data: dict[str, object]
+) -> dict[str, str]: ...  # returns demographic fields
 ```
 
 ### AuditEvent types to add

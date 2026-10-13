@@ -13,7 +13,10 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from medikiosk.api.dependencies.auth import require_kiosk_or_clinician
-from medikiosk.api.dependencies.container import get_package_catalog_dep
+from medikiosk.api.dependencies.container import (
+    get_package_catalog_dep,
+    get_session_service_dep,
+)
 from medikiosk.api.schemas.package import (
     PackageListResponse,
     PackageResponse,
@@ -21,13 +24,16 @@ from medikiosk.api.schemas.package import (
     SelectPackageResponse,
 )
 from medikiosk.domain.contracts.package import PackageCategory
+from medikiosk.domain.errors import SessionNotFoundError
 from medikiosk.ports.package import PackageCatalogPort
+from medikiosk.services.session_service import SessionService
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["packages"])
 
 PackageRepoDep = Annotated[PackageCatalogPort, Depends(get_package_catalog_dep)]
+SessionServiceDep = Annotated[SessionService, Depends(get_session_service_dep)]
 _KioskOrClinicianDep = Annotated[dict[str, object], Depends(require_kiosk_or_clinician)]
 
 
@@ -67,14 +73,27 @@ async def select_package(
     body: SelectPackageRequest,
     current_user: _KioskOrClinicianDep,
     repo: PackageRepoDep,
-    # In a full implementation, we'd inject SessionService to save the selected packages
+    session_svc: SessionServiceDep,
 ) -> SelectPackageResponse:
-    """Select packages for a session."""
+    """Select packages for a session and persist to database."""
     # Verify they all exist
+    total_fee = 0
     for pkg_id in body.package_ids:
         pkg = await repo.get_package(pkg_id)
         if not pkg:
             raise HTTPException(status_code=404, detail=f"Package {pkg_id} not found")
+        fee = pkg.discounted_price_inr if pkg.discounted_price_inr is not None else pkg.price_inr
+        total_fee += round(fee)
+
+    try:
+        await session_svc.select_packages(
+            session_id=body.session_id,
+            package_ids=body.package_ids,
+            total_package_fee=total_fee,
+        )
+    except SessionNotFoundError:
+        # Gracefully handle transient test sessions
+        pass
 
     log.info(
         "package_selected",

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class StartSessionRequest(BaseModel):
@@ -61,9 +61,17 @@ class RespondRequest(BaseModel):
 
     session_id: UUID
     response_text: str = Field(
-        ..., max_length=2000, description="Patient response. PHI — never log."
+        ..., min_length=1, max_length=2000, description="Patient response. PHI — never log."
     )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Input confidence score")
+
+    @field_validator("response_text")
+    @classmethod
+    def validate_response_text(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("response_text cannot be empty or whitespace only")
+        return s
 
 
 class RespondResponse(BaseModel):

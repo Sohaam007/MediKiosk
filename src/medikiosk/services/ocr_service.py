@@ -110,6 +110,9 @@ class OCRService:
                 f"Unsupported MIME type '{mime_type}'. Allowed: {sorted(_ALLOWED_MIME_TYPES)}"
             )
 
+        if len(image_bytes) == 0:
+            raise ValidationError("Image file cannot be empty.")
+
         if len(image_bytes) > _MAX_UPLOAD_BYTES:
             raise ValidationError(f"File size {len(image_bytes)} bytes exceeds 10 MB limit.")
 
