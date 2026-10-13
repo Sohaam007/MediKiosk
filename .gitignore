@@ -32,6 +32,10 @@ env/
 *.sqlite
 *.sqlite3
 medikiosk.db
+*.bak
+
+# ─── Agents & Logs ───────────────────────────────────────────────────────
+.agents/
 
 # ─── Uploaded Patient Data ───────────────────────────────────────────────
 data/uploads/

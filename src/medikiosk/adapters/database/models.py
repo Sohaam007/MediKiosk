@@ -38,9 +38,17 @@ class SessionModel(Base):
     chamber_room: Mapped[str | None] = mapped_column(String(50), nullable=True)
     billing_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     total_fees_inr: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    selected_doctor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    selected_package_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    predicted_wait_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     audit_events: Mapped[list[AuditEventModel]] = relationship(
-        "AuditEventModel", back_populates="session", cascade="all, delete-orphan"
+        "AuditEventModel",
+        back_populates="session",
+        primaryjoin="SessionModel.session_id == AuditEventModel.session_id",
+        foreign_keys="[AuditEventModel.session_id]",
+        cascade="save-update, merge",
+        passive_deletes=True,
     )
     documents: Mapped[list[DocumentModel]] = relationship(
         "DocumentModel", back_populates="session", cascade="all, delete-orphan"
@@ -58,7 +66,6 @@ class AuditEventModel(Base):
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     session_id: Mapped[str] = mapped_column(
         String(36),
-        ForeignKey("sessions.session_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -67,7 +74,12 @@ class AuditEventModel(Base):
     payload: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    session: Mapped[SessionModel] = relationship("SessionModel", back_populates="audit_events")
+    session: Mapped[SessionModel | None] = relationship(
+        "SessionModel",
+        back_populates="audit_events",
+        primaryjoin="SessionModel.session_id == AuditEventModel.session_id",
+        foreign_keys="[AuditEventModel.session_id]",
+    )
 
 
 class DocumentModel(Base):

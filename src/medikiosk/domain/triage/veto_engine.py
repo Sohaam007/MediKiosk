@@ -8,17 +8,45 @@ if any red-flag conditions are met.
 import uuid
 from collections.abc import Callable
 from datetime import datetime
+from enum import Enum
 from typing import ClassVar
 
 from medikiosk.domain.contracts import TriageAlert, TriagePriority, VoiceCapture
+
+
+class VetoRule(str, Enum):
+    """Rule identifiers for deterministic triage alerts."""
+
+    ACUTE_CORONARY_SYNDROME = "CARDIAC_RED_FLAG"
+    CARDIAC_RED_FLAG = "CARDIAC_RED_FLAG"
+    STROKE_FAST_PROTOCOL = "STROKE_FAST_PROTOCOL"
 
 
 class VetoEngine:
     """Pure, deterministic rule engine for clinical red flags."""
 
     # Keywords mapped to clinical concepts (includes Hinglish)
-    _CARDIAC_BASE: ClassVar[set[str]] = {"chest pain", "seene mein dard"}
-    _CARDIAC_RADIATION: ClassVar[set[str]] = {"left arm", "jaw", "back", "ulta haath"}
+    _CARDIAC_BASE: ClassVar[set[str]] = {
+        "chest pain",
+        "seene mein dard",
+        "chaati mein dard",
+        "chest pressure",
+        "pressure in chest",
+        "chest tightness",
+        "tightness in chest",
+        "chest heaviness",
+        "heaviness in chest",
+    }
+    _CARDIAC_RADIATION: ClassVar[set[str]] = {
+        "left arm",
+        "jaw",
+        "back",
+        "ulta haath",
+        "bayein haath",
+        "left shoulder",
+        "shoulder and arm",
+        "shoulder",
+    }
     _CARDIAC_EPIGASTRIC: ClassVar[set[str]] = {"epigastric discomfort", "pet ke upar dard"}
     _CARDIAC_DIAPHORESIS: ClassVar[set[str]] = {
         "diaphoresis",

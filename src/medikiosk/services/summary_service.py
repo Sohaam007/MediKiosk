@@ -113,7 +113,7 @@ class SummaryService:
         all_transcripts = [r.response_text for r in intake_session.responses]
         all_ocr_texts = [doc.extracted_text for doc in documents]
         source_content = " ".join(all_transcripts) + " ".join(all_ocr_texts)
-        source_transcript_hash = "sha256:" + hashlib.sha256(source_content.encode()).hexdigest()
+        source_transcript_hash = hashlib.sha256(source_content.encode()).hexdigest()
 
         # ── LLM synthesis (parameterised prompt — no patient text in prompt) ─
         prompt = _SUMMARY_PROMPT_TEMPLATE.format(

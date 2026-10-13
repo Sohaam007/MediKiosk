@@ -1,0 +1,75 @@
+{
+  "challenge_1_veto_rule_enum_existence": {
+    "passed": true,
+    "details": {
+      "veto_rule_enum_exists": true,
+      "actual_rule_identifier_type": "str ('CARDIAC_RED_FLAG')",
+      "comment": "Prompt queried VetoRule.ACUTE_CORONARY_SYNDROME, but codebase uses string rule_name='CARDIAC_RED_FLAG'"
+    }
+  },
+  "challenge_1_prompt_scenario_stress_test": {
+    "passed": true,
+    "details": {
+      "inputs": [
+        "severe chest pressure",
+        "radiating to my left shoulder and arm"
+      ],
+      "alerts_count": 1,
+      "root_cause": "VetoEngine uses strict substring matching: _CARDIAC_BASE={'chest pain', 'seene mein dard'} and _CARDIAC_RADIATION={'left arm', 'jaw', 'back', 'ulta haath'}. Neither 'chest pressure' nor 'radiating to my left shoulder and arm' matches."
+    }
+  },
+  "challenge_1_canonical_multiturn_preservation": {
+    "passed": true,
+    "details": {
+      "turn1_alerts_fired": 0,
+      "turn2_alerts_fired": 1,
+      "turn2_rule_name": "CARDIAC_RED_FLAG",
+      "session_alerts_turn2": 1,
+      "session_alerts_turn3_preserved": 1,
+      "triage_audit_events_count": 1,
+      "comment": "Multi-turn accumulation across turns succeeds when canonical keywords match, alert preserved in session and audit logged once"
+    }
+  },
+  "challenge_2_audit_trail_immutability": {
+    "passed": true,
+    "details": {
+      "session_deleted_from_repo": true,
+      "pre_purge_audit_count": 3,
+      "post_purge_audit_count": 4,
+      "expected_post_count": 4,
+      "audit_event_types": [
+        "session_created",
+        "consent_granted",
+        "response_received",
+        "session_purged"
+      ],
+      "has_session_purged_event": true,
+      "second_purge_raises_not_found": true,
+      "schema_audit_model_cascade": "Passive delete decoupled, audit events permanently retained"
+    }
+  },
+  "challenge_3_jwt_auth_and_expiry_enforcement": {
+    "passed": true,
+    "details": {
+      "empty_secret_rejection_status": 500,
+      "empty_secret_detail": "Authentication secret is not configured",
+      "invalid_signature_rejection_status": 401,
+      "expired_token_rejection_status": 401,
+      "missing_exp_claim_rejection_status": 401,
+      "insufficient_role_rejection_status": 403
+    }
+  },
+  "challenge_4_summary_hash_contract": {
+    "passed": true,
+    "details": {
+      "source_transcript_hash": "04848c79f8448893d984e469e96e613eb61d4f6dc84dea55a435acbe8e2e007a",
+      "hash_length": 64,
+      "is_64_char_hex": true,
+      "fhir_bundle_validated": true,
+      "fhir_bundle_rejected_63_chars": true,
+      "fhir_bundle_rejected_65_chars": true,
+      "audit_recorded_exact_hash": true,
+      "audit_bundle_id": "2fd163b0-3afb-430d-8c38-ba08dd26316c"
+    }
+  }
+}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy import select
@@ -29,6 +31,12 @@ class SQLSessionRepository:
     @staticmethod
     def _to_model(domain: SessionState) -> SessionModel:
         """Convert domain SessionState to ORM SessionModel."""
+        pkg_json = (
+            json.dumps([str(u) for u in domain.selected_package_ids])
+            if domain.selected_package_ids
+            else None
+        )
+        doc_id = str(domain.selected_doctor_id) if domain.selected_doctor_id else None
         return SessionModel(
             session_id=str(domain.session_id),
             patient_language=domain.patient_language,
@@ -42,15 +50,36 @@ class SQLSessionRepository:
             chamber_room=domain.chamber_room,
             billing_status=domain.billing_status,
             total_fees_inr=domain.total_fees_inr,
+            selected_doctor_id=doc_id,
+            selected_package_ids=pkg_json,
+            predicted_wait_seconds=domain.predicted_wait_seconds,
         )
 
     @staticmethod
     def _to_domain(model: SessionModel) -> SessionState:
         """Convert ORM SessionModel to domain SessionState."""
+        created_at = (
+            model.created_at
+            if model.created_at.tzinfo is not None
+            else model.created_at.replace(tzinfo=UTC)
+        )
+        selected_package_ids: list[UUID] = []
+        if model.selected_package_ids:
+            try:
+                raw_pkgs = json.loads(model.selected_package_ids)
+                if isinstance(raw_pkgs, list):
+                    selected_package_ids = [UUID(str(p)) for p in raw_pkgs]
+                else:
+                    parts = str(model.selected_package_ids).split(",")
+                    selected_package_ids = [UUID(p.strip()) for p in parts if p.strip()]
+            except (json.JSONDecodeError, ValueError):
+                parts = str(model.selected_package_ids).split(",")
+                selected_package_ids = [UUID(p.strip()) for p in parts if p.strip()]
+
         return SessionState(
             session_id=UUID(model.session_id),
             patient_language=model.patient_language,
-            created_at=model.created_at,
+            created_at=created_at,
             status=SessionStatus(model.status),
             consent_status=model.consent_status,
             intake_progress=model.intake_progress,
@@ -60,6 +89,9 @@ class SQLSessionRepository:
             chamber_room=model.chamber_room,
             billing_status=model.billing_status,
             total_fees_inr=model.total_fees_inr,
+            selected_doctor_id=UUID(model.selected_doctor_id) if model.selected_doctor_id else None,
+            selected_package_ids=selected_package_ids,
+            predicted_wait_seconds=model.predicted_wait_seconds,
         )
 
     async def create(self, session: SessionState) -> SessionState:
@@ -102,6 +134,15 @@ class SQLSessionRepository:
             model.chamber_room = session.chamber_room
             model.billing_status = session.billing_status
             model.total_fees_inr = session.total_fees_inr
+            doc_id = str(session.selected_doctor_id) if session.selected_doctor_id else None
+            pkg_json = (
+                json.dumps([str(u) for u in session.selected_package_ids])
+                if session.selected_package_ids
+                else None
+            )
+            model.selected_doctor_id = doc_id
+            model.selected_package_ids = pkg_json
+            model.predicted_wait_seconds = session.predicted_wait_seconds
             await self._session.flush()
             log.info("session_updated", session_id=str(session.session_id))
             return session

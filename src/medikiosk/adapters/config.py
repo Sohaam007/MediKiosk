@@ -17,7 +17,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import lru_cache
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -125,11 +125,19 @@ class Settings(BaseSettings):
         description="Comma-separated list of allowed CORS origins.",
     )
     api_key: SecretStr = Field(
-        default=SecretStr(""),
+        default=SecretStr("medikiosk-dev-secret-key-32chars-minimum-entropy"),
         description="Internal API key for kiosk-to-backend authentication.",
+    )
+    jwt_secret_key: SecretStr = Field(
+        default=SecretStr(""),
+        description="Dedicated JWT secret key. If empty, falls back to api_key.",
     )
 
     # ── Application ───────────────────────────────────────────────────────
+    environment: str = Field(
+        default="development",
+        description="Deployment environment: 'development', 'testing', or 'production'.",
+    )
     debug: bool = Field(
         default=False,
         description="Enable debug mode. MUST be False in production.",
@@ -178,8 +186,28 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        """True if running in production mode (debug=False)."""
-        return not self.debug
+        """True if running in production mode."""
+        return self.environment.lower() == "production"
+
+    @property
+    def effective_jwt_secret(self) -> str:
+        """Return the active JWT secret, preferring jwt_secret_key over api_key."""
+        jwt_sec = self.jwt_secret_key.get_secret_value()
+        if jwt_sec and jwt_sec.strip():
+            return jwt_sec
+        return self.api_key.get_secret_value()
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> Settings:
+        """Validate that secrets are strong and non-empty in production."""
+        secret = self.effective_jwt_secret
+        if self.is_production:
+            if not secret or len(secret) < 32 or "dev-secret" in secret or "insecure" in secret:
+                raise ValueError(
+                    "In production (environment='production'), api_key or jwt_secret_key must be "
+                    "configured with a high-entropy secret of at least 32 characters."
+                )
+        return self
 
 
 @lru_cache(maxsize=1)
