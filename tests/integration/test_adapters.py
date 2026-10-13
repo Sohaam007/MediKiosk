@@ -289,7 +289,6 @@ async def test_session_repo_persists_billing_and_wayfinding_fields(db_session_fa
         await db.commit()
 
 
-
 @pytest.mark.asyncio
 async def test_session_repo_get_missing_returns_none(db_session_factory) -> None:
     async with db_session_factory() as db:

@@ -60,6 +60,15 @@ def _check_file_for_http_egress(filepath: Path) -> list[str]:
         return []
 
     for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in {"httpx", "requests", "urllib.request"}:
+                    violations.append(
+                        f"adapters/{relative_str}:{node.lineno} imports HTTP library "
+                        f"'{alias.name}' — only "
+                        f"adapters/{ALLOWED_EGRESS_FILE} may make outbound data requests"
+                    )
+
         if isinstance(node, ast.ImportFrom) and node.module:
             if node.module in {"httpx", "requests", "urllib.request"}:
                 # Check if any imported names suggest POST/PUT (data-sending methods)

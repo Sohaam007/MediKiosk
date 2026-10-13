@@ -24,6 +24,6 @@ class PMJAYEligibilityPort(Protocol):
             PMJAYVerificationResult
 
         Raises:
-            Exception: If gateway is unavailable (simulating 503).
+            InsuranceGatewayError: If gateway is unavailable or times out.
         """
         ...

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from medikiosk.domain.contracts.insurance import PMJAYVerificationResult
+from medikiosk.domain.errors import InsuranceGatewayError
 from medikiosk.ports.insurance import PMJAYEligibilityPort
 
 
@@ -20,7 +21,7 @@ class MockPMJAYAdapter(PMJAYEligibilityPort):
             raise ValueError("Must provide either abha_number or pmjay_id")
 
         if abha_number == "TIMEOUT" or pmjay_id == "TIMEOUT":
-            raise Exception("Gateway Timeout")
+            raise InsuranceGatewayError("PM-JAY gateway timed out")
 
         is_eligible = False
         if pmjay_id and pmjay_id.startswith("PMJAY-ELIGIBLE"):
