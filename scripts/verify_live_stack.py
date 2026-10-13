@@ -121,9 +121,9 @@ async def test_stack() -> None:
         )
         assert resp.status_code == 200, f"Queue retrieval failed: {resp.text}"
         active_entries = resp.json().get("entries", [])
-        assert any(
-            str(s.get("session_id")) == str(session_id) for s in active_entries
-        ), f"Session {session_id} not found in queue entries: {active_entries}"
+        assert any(str(s.get("session_id")) == str(session_id) for s in active_entries), (
+            f"Session {session_id} not found in queue entries: {active_entries}"
+        )
         print("[PASS] Test 4: Clinician queue verified.")
 
         # Test 5: Purge session (DPDP right-to-erasure)
@@ -142,9 +142,9 @@ async def test_stack() -> None:
         )
         assert resp.status_code == 200
         active_after_purge = resp.json().get("entries", [])
-        assert not any(
-            str(s.get("session_id")) == str(session_id) for s in active_after_purge
-        ), "Purged session still appeared in active queue!"
+        assert not any(str(s.get("session_id")) == str(session_id) for s in active_after_purge), (
+            "Purged session still appeared in active queue!"
+        )
         print("[PASS] Test 6: Post-purge queue consistency verified.")
 
 
