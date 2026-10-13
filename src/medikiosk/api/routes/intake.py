@@ -39,6 +39,7 @@ from medikiosk.api.schemas.intake import (
     VerifyPMJAYRequest,
 )
 from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult
+from medikiosk.domain.errors import InsuranceGatewayError
 from medikiosk.ports.insurance import PMJAYEligibilityPort
 from medikiosk.services.intake_service import IntakeService
 from medikiosk.services.session_service import SessionService
@@ -224,7 +225,7 @@ async def purge_session(
                 target = base / folder / str(body.session_id)
                 if target.exists() and target.is_dir():
                     shutil.rmtree(target, ignore_errors=True)
-    except Exception as exc:
+    except OSError as exc:
         log.warning(
             "purge_storage_cleanup_failed",
             session_id=str(body.session_id),
@@ -268,7 +269,7 @@ async def verify_pmjay(
             abha_number=body.abha_number,
             pmjay_id=body.pmjay_id,
         )
-    except Exception as e:
+    except (InsuranceGatewayError, TimeoutError) as e:
         log.warning(
             "pmjay_verification_failed",
             session_id=str(session.session_id),
@@ -287,4 +288,3 @@ async def verify_pmjay(
         )
 
     return result
-

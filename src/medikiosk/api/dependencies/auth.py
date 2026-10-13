@@ -229,9 +229,7 @@ def verify_jwt(
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
-    token: Annotated[
-        str | None, Query(description="JWT token for SSE/WebSocket clients")
-    ] = None,
+    token: Annotated[str | None, Query(description="JWT token for SSE/WebSocket clients")] = None,
 ) -> dict[str, object]:
     """FastAPI dependency: authenticate the request and return JWT claims.
 

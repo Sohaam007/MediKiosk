@@ -73,9 +73,7 @@ class PagePatientRequest(BaseModel):
 
         # Strict E.164 validation: + followed by 7-15 digits
         if not re.match(r"^\+[1-9]\d{6,14}$", cleaned):
-            raise ValueError(
-                "Phone number must be a valid E.164 format (e.g. +919876543210)"
-            )
+            raise ValueError("Phone number must be a valid E.164 format (e.g. +919876543210)")
         return cleaned
 
 
@@ -85,4 +83,3 @@ class PagePatientResponse(BaseModel):
     paged: bool
     token: str
     turns_ahead: int
-

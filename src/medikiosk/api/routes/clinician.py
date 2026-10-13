@@ -73,9 +73,7 @@ async def _fetch_queue_response(
     now = datetime.now(UTC)
     for s in sessions:
         created_at = (
-            s.created_at
-            if s.created_at.tzinfo is not None
-            else s.created_at.replace(tzinfo=UTC)
+            s.created_at if s.created_at.tzinfo is not None else s.created_at.replace(tzinfo=UTC)
         )
         wait_seconds = int((now - created_at).total_seconds())
 
@@ -127,9 +125,7 @@ async def _fetch_queue_response(
 
     # Sort entries by priority (critical > urgent > normal), then wait time descending
     priority_order = {"critical": 0, "urgent": 1, "normal": 2}
-    entries.sort(
-        key=lambda e: (priority_order.get(e.triage_priority, 2), -e.wait_time_seconds)
-    )
+    entries.sort(key=lambda e: (priority_order.get(e.triage_priority, 2), -e.wait_time_seconds))
 
     return QueueResponse(
         department_id=department_id,

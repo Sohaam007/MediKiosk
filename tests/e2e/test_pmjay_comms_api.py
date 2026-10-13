@@ -122,4 +122,3 @@ def test_pmjay_whitespace_ids_rejected(client_kiosk):
         json={"session_id": session_id, "pmjay_id": "   ", "abha_number": "  "},
     )
     assert resp.status_code == 422
-

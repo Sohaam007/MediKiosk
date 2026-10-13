@@ -58,10 +58,10 @@ _PHI_FIELDS: frozenset[str] = frozenset(
 )
 
 _PATTERNS = [
-    re.compile(r"(?:\+91[\-\s]?)?[6-9]\d{9}\b"),                     # Indian Mobile
-    re.compile(r"\b\d{2}-\d{4}-\d{4}-\d{4}\b"),                     # ABHA ID
-    re.compile(r"\b\d{4}\s?\d{4}\s?\d{4}\b"),                       # Aadhaar
-    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), # Email
+    re.compile(r"(?:\+91[\-\s]?)?[6-9]\d{9}\b"),  # Indian Mobile
+    re.compile(r"\b\d{2}-\d{4}-\d{4}-\d{4}\b"),  # ABHA ID
+    re.compile(r"\b\d{4}\s?\d{4}\s?\d{4}\b"),  # Aadhaar
+    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),  # Email
 ]
 
 _PHI_REDACTED = "[PHI REDACTED]"

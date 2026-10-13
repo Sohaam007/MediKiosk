@@ -21,6 +21,7 @@ def test_pmjay_verification_result_valid():
     assert result.eligible is True
     assert result.coverage_amount_inr == 500000
 
+
 def test_pmjay_verification_result_frozen():
     """Test immutability."""
     now = datetime.now(UTC)
