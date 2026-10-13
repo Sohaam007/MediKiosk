@@ -27,6 +27,7 @@ from medikiosk.domain.contracts.document import DocumentScan, DocumentType
 from medikiosk.domain.contracts.entity import CodeSystem, EntityType, MedicalEntity
 from medikiosk.domain.contracts.eval import EvalResult
 from medikiosk.domain.contracts.fhir import FHIRBundle
+from medikiosk.domain.contracts.insurance import PMJAYVerificationResult
 from medikiosk.domain.contracts.intake import (
     ClinicalDomain,
     IntakeQuestion,
@@ -75,6 +76,7 @@ __all__ = [
     "IntakeResponse",
     "IntakeSession",
     "MedicalEntity",
+    "PMJAYVerificationResult",
     "PackageCategory",
     "QuestionType",
     "ResponseSource",

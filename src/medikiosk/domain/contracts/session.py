@@ -99,6 +99,12 @@ class SessionState(BaseModel):
     chamber_room: str | None = Field(default=None, description="Assigned room/chamber.")
     predicted_wait_seconds: int | None = Field(default=None, description="Wait time in seconds.")
 
+    # Phase X.1 Billing fields
+    billing_status: str | None = Field(
+        default=None, description="e.g. 'STANDARD', 'PMJAY_CASHLESS', 'WAIVED_EMERGENCY'"
+    )
+    total_fees_inr: int = Field(default=0, description="Total fees in INR")
+
     @model_validator(mode="after")
     def _require_proxy_relationship(self) -> SessionState:
         """Enforce that proxy sessions always record who the proxy is."""

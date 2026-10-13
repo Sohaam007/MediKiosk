@@ -6,7 +6,7 @@
 > and leading Indian hospital enterprise systems (Narayana Health NH Care, Apollo Hospitals
 > MedMantra & Qwaiting, Manipal Hospitals, Max Healthcare).
 >
-> **Status:** Planning complete. Implementation deferred to Phase X (Ecosystem Expansion).
+> **Status:** Planning complete. Phase X.1 (Virtual Waiting Room) and Phase X.4 (PM-JAY Eligibility) implemented & active; remaining features deferred to subsequent Phase X iterations.
 >
 > **Scope:** Features 1–5 are platform ecosystem expansions. Features 6–12 are hospital
 > front-door operating system features that transform MediKiosk from an acute triage engine

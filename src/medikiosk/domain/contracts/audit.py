@@ -49,6 +49,9 @@ class AuditEventType(str, Enum):
     # detection fires first, purge completes and then SESSION_PURGED fires.
     # If purge fails, only WALK_AWAY_DETECTED exists in the audit trail.
 
+    BILLING_STATUS_UPDATED = "billing_status_updated"
+    PATIENT_PAGED = "patient_paged"
+
 
 class AuditEvent(BaseModel):
     """A single immutable audit event in the medico-legal trail.
