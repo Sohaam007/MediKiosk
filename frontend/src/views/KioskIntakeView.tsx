@@ -2764,7 +2764,7 @@ export function KioskIntakeView() {
               <button
                 type="button"
                 onClick={() => setShowPaymentModal(false)}
-                className="w-full min-h-[44px] text-slate-600 hover:text-slate-800 text-xs font-bold transition"
+                className="w-full min-h-[48px] text-slate-600 hover:text-slate-800 text-xs font-bold transition"
               >
                 Cancel / Change Services
               </button>

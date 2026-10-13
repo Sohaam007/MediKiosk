@@ -339,7 +339,7 @@ async def get_session_detail(
             patient_profile = intake_data.get("patient_profile", {})
             chief_complaint = intake_data.get("chief_complaint", None)
             timeline_events = intake_data.get("timeline_events", [])
-    except Exception as exc:
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         log.warning(
             "clinician_session_detail_cache_lookup_failed",
             session_id=session_id,

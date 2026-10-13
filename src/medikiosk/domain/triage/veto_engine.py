@@ -25,7 +25,6 @@ class VetoRule(str, Enum):
 class VetoEngine:
     """Pure, deterministic rule engine for clinical red flags."""
 
-    # Keywords mapped to clinical concepts (includes Hinglish)
     # Immutable frozensets for concurrency safety
     _CARDIAC_BASE: ClassVar[frozenset[str]] = frozenset(
         {

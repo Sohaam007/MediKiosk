@@ -134,3 +134,9 @@ class AuditError(MediKioskError):
     """Raised when the append-only audit trail cannot be written."""
 
     error_code: str = "AUDIT_ERROR"
+
+
+class InsuranceGatewayError(MediKioskError):
+    """Raised when an insurance gateway (e.g. PM-JAY) is unavailable or fails."""
+
+    error_code: str = "INSURANCE_GATEWAY_ERROR"

@@ -323,7 +323,6 @@ class IntakeService:
                 updated_session.model_dump_json(),
                 ttl_seconds=self._cache_ttl_seconds,
             )
-
             return updated_session, triage_alerts
 
     async def close_intake(self, session_id: uuid.UUID) -> None:

@@ -1319,7 +1319,7 @@ export function ClinicianQueueView({ onSwitchToKiosk }: ClinicianQueueViewProps 
                 onSwitchToKiosk();
               }
             }}
-            className="flex items-center justify-between bg-[#0A1F33] hover:bg-[#132C47] cursor-pointer rounded-xl p-3 mb-6 border border-[#1E3A8A]/60 shadow-inner transition-colors"
+            className="flex items-center justify-between min-h-[48px] w-full bg-[#0A1F33] hover:bg-[#132C47] cursor-pointer rounded-xl p-3 mb-6 border border-[#1E3A8A]/60 shadow-inner transition-colors"
             title="Click to switch to Patient Kiosk Terminal"
           >
             <div>
@@ -1454,7 +1454,7 @@ export function ClinicianQueueView({ onSwitchToKiosk }: ClinicianQueueViewProps 
                   prev === 'bilingual' ? 'hindi' : prev === 'hindi' ? 'english' : 'bilingual'
                 );
               }}
-              className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200"
+              className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 min-h-[48px] rounded-lg transition-colors cursor-pointer border border-slate-200"
               title="Toggle Clinician Console Language Mode"
             >
               <Globe className="w-3.5 h-3.5 text-blue-600" />
@@ -1471,7 +1471,7 @@ export function ClinicianQueueView({ onSwitchToKiosk }: ClinicianQueueViewProps 
               <button
                 type="button"
                 onClick={() => setShowNotificationPanel((prev) => !prev)}
-                className="relative cursor-pointer hover:bg-slate-100 p-2 rounded-full transition-colors text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="relative cursor-pointer hover:bg-slate-100 min-h-[48px] min-w-[48px] flex items-center justify-center p-2 rounded-full transition-colors text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title="View Active Clinical Triage Notifications"
               >
                 <Bell className="w-5 h-5" />
@@ -1487,7 +1487,7 @@ export function ClinicianQueueView({ onSwitchToKiosk }: ClinicianQueueViewProps 
                     <button
                       type="button"
                       onClick={() => setShowNotificationPanel(false)}
-                      className="text-slate-400 hover:text-slate-600 text-xs p-1"
+                      className="text-slate-400 hover:text-slate-600 text-xs min-h-[48px] min-w-[48px] flex items-center justify-center p-1"
                     >
                       ✕
                     </button>
