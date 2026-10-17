@@ -12,6 +12,7 @@ from enum import Enum
 from typing import ClassVar
 
 from medikiosk.domain.contracts import TriageAlert, TriagePriority, VoiceCapture
+from medikiosk.domain.vitals import NEWS2Assessment
 
 
 class VetoRule(str, Enum):
@@ -20,6 +21,7 @@ class VetoRule(str, Enum):
     ACUTE_CORONARY_SYNDROME = "CARDIAC_RED_FLAG"
     CARDIAC_RED_FLAG = "CARDIAC_RED_FLAG"
     STROKE_FAST_PROTOCOL = "STROKE_FAST_PROTOCOL"
+    NEWS2_PHYSIOLOGICAL_DETERIORATION = "NEWS2_PHYSIOLOGICAL_DETERIORATION"
 
 
 class VetoEngine:
@@ -84,6 +86,7 @@ class VetoEngine:
         now: datetime,
         vitals: dict[str, float] | None = None,
         telemetry: list[VoiceCapture] | None = None,
+        news2_assessment: NEWS2Assessment | None = None,
     ) -> list[TriageAlert]:
         """Evaluate inputs against strict clinical rules.
 
@@ -93,6 +96,7 @@ class VetoEngine:
             now: Current timestamp.
             vitals: Dictionary of vital signs (e.g., "sys_bp", "dia_bp").
             telemetry: List of voice capture telemetry data.
+            news2_assessment: Optional calculated NEWS2 physiological assessment.
 
         Returns:
             List of CRITICAL TriageAlerts if any rules matched.
@@ -198,5 +202,24 @@ class VetoEngine:
                         created_at=now,
                     )
                 )
+
+        # 4. Evaluate Objective NEWS2 Vitals Deterioration
+        if news2_assessment is not None and news2_assessment.triggers_red_veto:
+            alerts.append(
+                TriageAlert(
+                    alert_id=alert_id_generator(),
+                    priority=TriagePriority.CRITICAL,
+                    rule_name="NEWS2_PHYSIOLOGICAL_DETERIORATION",
+                    trigger_text=(
+                        f"NEWS2 score={news2_assessment.total_score} "
+                        f"({news2_assessment.risk_band}) triggers clinical veto"
+                    ),
+                    recommended_action=(
+                        "Immediate emergency medical team activation and "
+                        "continuous vital sign monitoring"
+                    ),
+                    created_at=now,
+                )
+            )
 
         return alerts

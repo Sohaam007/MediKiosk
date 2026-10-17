@@ -41,6 +41,9 @@ class SessionModel(Base):
     selected_doctor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     selected_package_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
     predicted_wait_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    news2_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    news2_risk_band: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    vitals_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     audit_events: Mapped[list[AuditEventModel]] = relationship(
         "AuditEventModel",

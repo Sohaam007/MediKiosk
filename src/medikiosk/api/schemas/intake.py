@@ -135,3 +135,73 @@ class VerifyPMJAYRequest(BaseModel):
         if not pmjay and not abha:
             raise ValueError("Must provide either pmjay_id or abha_number")
         return self
+
+
+class RecordVitalsRequest(BaseModel):
+    """Request body for POST /api/intake/vitals.
+
+    Strict physiological bounds matching human survival limits.
+    """
+
+    session_id: UUID
+    spo2_percent: int = Field(..., ge=50, le=100, description="SpO2 percentage (50-100)")
+    systolic_bp_mmhg: int = Field(..., ge=40, le=300, description="Systolic BP (40-300 mmHg)")
+    diastolic_bp_mmhg: int = Field(..., ge=20, le=200, description="Diastolic BP (20-200 mmHg)")
+    pulse_bpm: int = Field(..., ge=20, le=250, description="Pulse rate in bpm (20-250)")
+    temperature_c: float = Field(..., ge=30.0, le=45.0, description="Temperature in C (30.0-45.0)")
+    respiration_rate: int = Field(
+        default=16, ge=4, le=60, description="Respiration rate in bpm (4-60)"
+    )
+    supplemental_o2: bool = Field(default=False, description="Supplemental O2 active")
+    avpu_alert: bool = Field(default=True, description="Conscious & Alert on AVPU scale")
+
+
+class RecordVitalsResponse(BaseModel):
+    """Response body for POST /api/intake/vitals."""
+
+    session_id: UUID
+    news2_score: int
+    news2_risk_band: str
+    triggers_red_veto: bool
+    triage_alerts: list[dict[str, object]] = Field(default_factory=list)
+    message: str
+
+
+class OfflineSessionPayload(BaseModel):
+    """Offline intake payload queued in IndexedDB."""
+
+    client_session_uuid: str = Field(
+        ..., min_length=1, description="Deterministic client session UUID"
+    )
+    created_at_iso: str = Field(..., description="ISO 8601 creation timestamp")
+    language: str = Field(default="en", description="Selected language code")
+    symptoms: list[str] = Field(default_factory=list, description="Patient symptom strings")
+    vitals: dict[str, object] | None = Field(default=None, description="Optional recorded vitals")
+    offline_token: str | None = Field(default=None, description="Client-minted offline token")
+    tenant_id: str = Field(default="default", description="Tenant ID")
+    department_id: str = Field(default="general", description="Department ID")
+
+
+class SyncedSessionResult(BaseModel):
+    """Result of reconciling a single offline session."""
+
+    client_session_uuid: str
+    session_id: UUID
+    token_number: str
+    is_existing: bool
+
+
+class SyncBatchRequest(BaseModel):
+    """Request body for POST /api/intake/sync-batch. Up to 50 sessions."""
+
+    sessions: list[OfflineSessionPayload] = Field(
+        ..., min_length=1, max_length=50, description="Batch of up to 50 offline sessions"
+    )
+
+
+class SyncBatchResponse(BaseModel):
+    """Response body for POST /api/intake/sync-batch."""
+
+    synced_count: int
+    results: list[SyncedSessionResult]
+    message: str

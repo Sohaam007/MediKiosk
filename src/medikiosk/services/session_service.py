@@ -9,7 +9,10 @@ SECURITY: Only session_id (UUID string) is ever written to logs. No PHI.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 import structlog
@@ -26,6 +29,7 @@ from medikiosk.domain.errors import (
     SessionNotFoundError,
     SessionTerminatedError,
 )
+from medikiosk.domain.vitals import NEWS2Assessment, VitalSigns
 from medikiosk.ports.audit import AuditRepository
 from medikiosk.ports.database import SessionRepository
 
@@ -61,6 +65,17 @@ class SessionService:
         self._session_repo = session_repo
         self._audit_repo = audit_repo
         self._ttl_seconds = ttl_seconds
+        self._session_locks: dict[uuid.UUID, asyncio.Lock] = {}
+
+    def _get_session_lock(self, session_id: uuid.UUID) -> asyncio.Lock:
+        """Retrieve or create an asyncio.Lock for the session, pruning stale locks."""
+        if session_id not in self._session_locks:
+            if len(self._session_locks) > 2000:
+                unlocked_keys = [k for k, lock in self._session_locks.items() if not lock.locked()]
+                for k in unlocked_keys[:1000]:
+                    self._session_locks.pop(k, None)
+            self._session_locks[session_id] = asyncio.Lock()
+        return self._session_locks[session_id]
 
     async def _next_seq(self, session_id: uuid.UUID) -> int:
         """Return the next monotonic sequence number for the session.
@@ -525,3 +540,58 @@ class SessionService:
 
         await self._session_repo.delete(session_id)
         log.info("session_purged_dpdp", session_id=str(session_id))
+
+    async def record_vitals(
+        self,
+        session_id: uuid.UUID,
+        vitals: VitalSigns,
+        news2: NEWS2Assessment,
+        *,
+        now: datetime | None = None,
+    ) -> SessionState:
+        """Record objective vital signs and NEWS2 assessment for a session.
+
+        Guarantees per-session concurrency lock safety. Appends an immutable
+        VITALS_RECORDED audit event with zero-PHI payload.
+        """
+        async with self._get_session_lock(session_id):
+            session = await self.get_session(session_id)
+            if session.status == SessionStatus.TERMINATED:
+                raise SessionTerminatedError(f"Session {session_id} is terminated")
+
+            timestamp = now or datetime.now(UTC)
+            vitals_dict = asdict(vitals)
+            vitals_json = json.dumps(vitals_dict)
+
+            updated = session.model_copy(
+                update={
+                    "news2_score": news2.total_score,
+                    "news2_risk_band": news2.risk_band,
+                    "vitals_json": vitals_json,
+                }
+            )
+            await self._session_repo.update(updated)
+
+            seq = await self._next_seq(session_id)
+            await self._audit_repo.append(
+                AuditEvent(
+                    event_id=uuid.uuid4(),
+                    session_id=session_id,
+                    event_type=AuditEventType.VITALS_RECORDED,
+                    timestamp=timestamp,
+                    sequence_number=seq,
+                    payload={
+                        "news2_score": news2.total_score,
+                        "news2_risk_band": news2.risk_band,
+                        "triggers_red_veto": news2.triggers_red_veto,
+                    },
+                )
+            )
+
+            log.info(
+                "vitals_recorded",
+                session_id=str(session_id),
+                news2_score=news2.total_score,
+                news2_risk_band=news2.risk_band,
+            )
+            return updated

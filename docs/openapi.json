@@ -299,6 +299,140 @@
         }
       }
     },
+    "/api/intake/vitals": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Record Vitals Route",
+        "description": "Record patient physiological vital signs and calculate NEWS2 score.\n\nEvaluates Royal College of Physicians NEWS2 standard and clinical veto rules.\nLogs zero-PHI: records session_id, news2_score, and news2_risk_band only.",
+        "operationId": "record_vitals_route_api_intake_vitals_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JWT token for SSE/WebSocket clients",
+              "title": "Token"
+            },
+            "description": "JWT token for SSE/WebSocket clients"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordVitalsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordVitalsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intake/sync-batch": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Sync Batch Route",
+        "description": "Batch reconcile up to 50 offline sessions from IndexedDB store-and-forward.\n\nGuarantees idempotency on client_session_uuid: existing sessions are returned\nwithout row duplication. Reconciled sessions become visible in the live clinician queue.",
+        "operationId": "sync_batch_route_api_intake_sync_batch_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JWT token for SSE/WebSocket clients",
+              "title": "Token"
+            },
+            "description": "JWT token for SSE/WebSocket clients"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncBatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/clinician/queue": {
       "get": {
         "tags": [
@@ -1429,6 +1563,48 @@
         }
       }
     },
+    "/api/abdm/link-care-context": {
+      "post": {
+        "tags": [
+          "abdm"
+        ],
+        "summary": "Link Care Context",
+        "description": "Link ABDM M3 Care Context and generate verifiable e-Rx pharmacy token.\n\nAppends AuditEventType.CARE_CONTEXT_LINKED with zero-PHI payload.\nZero-PHI rule: logs only session_id and care_context_status=\"LINKED\".\nNever logs abha_id, soap_note, or medication strings.",
+        "operationId": "link_care_context_api_abdm_link_care_context_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkCareContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkCareContextResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/summary/generate": {
       "post": {
         "tags": [
@@ -1613,6 +1789,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FHIRBundleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/surge-radar": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Surge Radar",
+        "description": "Return real-time, k-anonymous epidemiological surge and command radar telemetry.\n\nZero-PHI: Never exposes individual patient identities, symptoms, or diagnoses.",
+        "operationId": "get_surge_radar_api_analytics_surge_radar_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JWT token for SSE/WebSocket clients",
+              "title": "Token"
+            },
+            "description": "JWT token for SSE/WebSocket clients"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SurgeRadarResponse"
                 }
               }
             }
@@ -2021,6 +2254,41 @@
         "title": "ClinicianSessionDetailResponse",
         "description": "Full detail for a patient session."
       },
+      "DepartmentLoad": {
+        "properties": {
+          "department": {
+            "type": "string",
+            "title": "Department",
+            "description": "Department identifier"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "description": "Human-readable department name"
+          },
+          "active_queue_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Active Queue Count",
+            "description": "Active queue depth"
+          },
+          "predicted_wait_minutes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Predicted Wait Minutes",
+            "description": "Estimated wait time in minutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "department",
+          "display_name",
+          "active_queue_count",
+          "predicted_wait_minutes"
+        ],
+        "title": "DepartmentLoad",
+        "description": "Active congestion and estimated wait time for a clinical department."
+      },
       "DoctorListResponse": {
         "properties": {
           "doctors": {
@@ -2357,6 +2625,144 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "LinkCareContextRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "abha_id": {
+            "type": "string",
+            "minLength": 4,
+            "title": "Abha Id",
+            "description": "Patient ABHA ID or ABHA Address"
+          },
+          "soap_note": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Soap Note",
+            "description": "Clinician SOAP note"
+          },
+          "prescribed_medications": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prescribed Medications",
+            "description": "List of prescribed medications"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "abha_id",
+          "soap_note"
+        ],
+        "title": "LinkCareContextRequest",
+        "description": "Request body for POST /api/abdm/link-care-context."
+      },
+      "LinkCareContextResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "care_context_reference": {
+            "type": "string",
+            "title": "Care Context Reference"
+          },
+          "pharmacy_token": {
+            "type": "string",
+            "title": "Pharmacy Token"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "LINKED"
+          },
+          "linked_at": {
+            "type": "string",
+            "title": "Linked At"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "care_context_reference",
+          "pharmacy_token",
+          "linked_at",
+          "message"
+        ],
+        "title": "LinkCareContextResponse",
+        "description": "Response body for POST /api/abdm/link-care-context."
+      },
+      "OfflineSessionPayload": {
+        "properties": {
+          "client_session_uuid": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Client Session Uuid",
+            "description": "Deterministic client session UUID"
+          },
+          "created_at_iso": {
+            "type": "string",
+            "title": "Created At Iso",
+            "description": "ISO 8601 creation timestamp"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Selected language code",
+            "default": "en"
+          },
+          "symptoms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Symptoms",
+            "description": "Patient symptom strings"
+          },
+          "vitals": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vitals",
+            "description": "Optional recorded vitals"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id",
+            "description": "Tenant ID",
+            "default": "default"
+          },
+          "department_id": {
+            "type": "string",
+            "title": "Department Id",
+            "description": "Department ID",
+            "default": "general"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_session_uuid",
+          "created_at_iso"
+        ],
+        "title": "OfflineSessionPayload",
+        "description": "Offline intake payload queued in IndexedDB."
+      },
       "PMJAYVerificationResult": {
         "properties": {
           "eligible": {
@@ -2675,6 +3081,124 @@
         "title": "QueueResponse",
         "description": "Response body for GET /api/clinician/queue.\n\nAttributes:\n    department_id: The department whose queue is returned.\n    entries: Ordered list of queue entries (highest priority first).\n    total_count: Total number of active sessions in the queue."
       },
+      "RecordVitalsRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "spo2_percent": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 50.0,
+            "title": "Spo2 Percent",
+            "description": "SpO2 percentage (50-100)"
+          },
+          "systolic_bp_mmhg": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 40.0,
+            "title": "Systolic Bp Mmhg",
+            "description": "Systolic BP (40-300 mmHg)"
+          },
+          "diastolic_bp_mmhg": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 20.0,
+            "title": "Diastolic Bp Mmhg",
+            "description": "Diastolic BP (20-200 mmHg)"
+          },
+          "pulse_bpm": {
+            "type": "integer",
+            "maximum": 250.0,
+            "minimum": 20.0,
+            "title": "Pulse Bpm",
+            "description": "Pulse rate in bpm (20-250)"
+          },
+          "temperature_c": {
+            "type": "number",
+            "maximum": 45.0,
+            "minimum": 30.0,
+            "title": "Temperature C",
+            "description": "Temperature in C (30.0-45.0)"
+          },
+          "respiration_rate": {
+            "type": "integer",
+            "maximum": 60.0,
+            "minimum": 4.0,
+            "title": "Respiration Rate",
+            "description": "Respiration rate in bpm (4-60)",
+            "default": 16
+          },
+          "supplemental_o2": {
+            "type": "boolean",
+            "title": "Supplemental O2",
+            "description": "Supplemental O2 active",
+            "default": false
+          },
+          "avpu_alert": {
+            "type": "boolean",
+            "title": "Avpu Alert",
+            "description": "Conscious & Alert on AVPU scale",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "spo2_percent",
+          "systolic_bp_mmhg",
+          "diastolic_bp_mmhg",
+          "pulse_bpm",
+          "temperature_c"
+        ],
+        "title": "RecordVitalsRequest",
+        "description": "Request body for POST /api/intake/vitals.\n\nStrict physiological bounds matching human survival limits."
+      },
+      "RecordVitalsResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "news2_score": {
+            "type": "integer",
+            "title": "News2 Score"
+          },
+          "news2_risk_band": {
+            "type": "string",
+            "title": "News2 Risk Band"
+          },
+          "triggers_red_veto": {
+            "type": "boolean",
+            "title": "Triggers Red Veto"
+          },
+          "triage_alerts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Triage Alerts"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "news2_score",
+          "news2_risk_band",
+          "triggers_red_veto",
+          "message"
+        ],
+        "title": "RecordVitalsResponse",
+        "description": "Response body for POST /api/intake/vitals."
+      },
       "RespondRequest": {
         "properties": {
           "session_id": {
@@ -2953,6 +3477,176 @@
         ],
         "title": "SummarySectionResponse",
         "description": "Section of a clinical summary."
+      },
+      "SurgeRadarResponse": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "description": "UTC ISO timestamp of telemetry snapshot"
+          },
+          "department_loads": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentLoad"
+            },
+            "type": "array",
+            "title": "Department Loads"
+          },
+          "syndromic_clusters": {
+            "items": {
+              "$ref": "#/components/schemas/SyndromicCluster"
+            },
+            "type": "array",
+            "title": "Syndromic Clusters"
+          },
+          "vitals_escalation_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Vitals Escalation Rate",
+            "description": "Percentage of intakes triggering NEWS2 red veto"
+          },
+          "total_active_intakes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Active Intakes",
+            "description": "Total active sessions across wards"
+          },
+          "overall_surge_alert": {
+            "type": "boolean",
+            "title": "Overall Surge Alert",
+            "description": "True if any syndromic cluster or load breached"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "department_loads",
+          "syndromic_clusters",
+          "vitals_escalation_rate",
+          "total_active_intakes",
+          "overall_surge_alert"
+        ],
+        "title": "SurgeRadarResponse",
+        "description": "Response payload for GET /api/analytics/surge-radar."
+      },
+      "SyncBatchRequest": {
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/OfflineSessionPayload"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Sessions",
+            "description": "Batch of up to 50 offline sessions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessions"
+        ],
+        "title": "SyncBatchRequest",
+        "description": "Request body for POST /api/intake/sync-batch. Up to 50 sessions."
+      },
+      "SyncBatchResponse": {
+        "properties": {
+          "synced_count": {
+            "type": "integer",
+            "title": "Synced Count"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SyncedSessionResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "synced_count",
+          "results",
+          "message"
+        ],
+        "title": "SyncBatchResponse",
+        "description": "Response body for POST /api/intake/sync-batch."
+      },
+      "SyncedSessionResult": {
+        "properties": {
+          "client_session_uuid": {
+            "type": "string",
+            "title": "Client Session Uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "token_number": {
+            "type": "string",
+            "title": "Token Number"
+          },
+          "is_existing": {
+            "type": "boolean",
+            "title": "Is Existing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_session_uuid",
+          "session_id",
+          "token_number",
+          "is_existing"
+        ],
+        "title": "SyncedSessionResult",
+        "description": "Result of reconciling a single offline session."
+      },
+      "SyndromicCluster": {
+        "properties": {
+          "cluster_name": {
+            "type": "string",
+            "title": "Cluster Name",
+            "description": "Cluster identifier"
+          },
+          "display_title": {
+            "type": "string",
+            "title": "Display Title",
+            "description": "Human-readable clinical syndrome"
+          },
+          "count_last_24h": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Count Last 24H",
+            "description": "Intake count within 24-hour window"
+          },
+          "threshold": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Threshold",
+            "description": "Outbreak escalation threshold"
+          },
+          "surge_alert": {
+            "type": "boolean",
+            "title": "Surge Alert",
+            "description": "True if cluster exceeds safety threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cluster_name",
+          "display_title",
+          "count_last_24h",
+          "threshold",
+          "surge_alert"
+        ],
+        "title": "SyndromicCluster",
+        "description": "Epidemiological syndromic outbreak tracking metric."
       },
       "TokenRequest": {
         "properties": {

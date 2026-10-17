@@ -16,9 +16,10 @@ SECURITY:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Annotated
-from uuid import uuid4
+from uuid import NAMESPACE_DNS, UUID, uuid4, uuid5
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,19 +33,30 @@ from medikiosk.api.dependencies.container import (
 from medikiosk.api.schemas.intake import (
     PurgeRequest,
     PurgeResponse,
+    RecordVitalsRequest,
+    RecordVitalsResponse,
     RespondRequest,
     RespondResponse,
     StartSessionRequest,
     StartSessionResponse,
+    SyncBatchRequest,
+    SyncBatchResponse,
+    SyncedSessionResult,
     VerifyPMJAYRequest,
 )
 from medikiosk.domain.contracts import InformantType, PMJAYVerificationResult, SessionStatus
-from medikiosk.domain.errors import InsuranceGatewayError, SessionTerminatedError
+from medikiosk.domain.errors import (
+    InsuranceGatewayError,
+    SessionNotFoundError,
+    SessionTerminatedError,
+)
 from medikiosk.domain.intake.clinical_questions import (
     generate_next_question,
     get_termination_acknowledgement,
     is_concluding_response,
 )
+from medikiosk.domain.triage.veto_engine import VetoEngine
+from medikiosk.domain.vitals import NEWS2Calculator, VitalSigns
 from medikiosk.ports.insurance import PMJAYEligibilityPort
 from medikiosk.services.intake_service import IntakeService
 from medikiosk.services.session_service import SessionService
@@ -59,6 +71,37 @@ router = APIRouter(tags=["intake"])
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service_dep)]
 IntakeServiceDep = Annotated[IntakeService, Depends(get_intake_service_dep)]
 _KioskOrClinicianDep = Annotated[dict[str, object], Depends(require_kiosk_or_clinician)]
+
+
+def _safe_int(val: object, default: int) -> int:
+    """Safely convert object to int with default fallback."""
+    if val is None:
+        return default
+    try:
+        return int(str(val))
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(val: object, default: float) -> float:
+    """Safely convert object to float with default fallback."""
+    if val is None:
+        return default
+    try:
+        return float(str(val))
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_bool(val: object, default: bool) -> bool:
+    """Safely convert object to bool with default fallback."""
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.lower() in ("true", "1", "yes")
+    return bool(val)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -311,3 +354,253 @@ async def verify_pmjay(
         )
 
     return result
+
+
+@router.post("/api/intake/vitals", response_model=RecordVitalsResponse, status_code=200)
+async def record_vitals_route(
+    body: RecordVitalsRequest,
+    current_user: _KioskOrClinicianDep,
+    session_svc: SessionServiceDep,
+) -> RecordVitalsResponse:
+    """Record patient physiological vital signs and calculate NEWS2 score.
+
+    Evaluates Royal College of Physicians NEWS2 standard and clinical veto rules.
+    Logs zero-PHI: records session_id, news2_score, and news2_risk_band only.
+    """
+    vitals = VitalSigns(
+        spo2_percent=body.spo2_percent,
+        systolic_bp_mmhg=body.systolic_bp_mmhg,
+        diastolic_bp_mmhg=body.diastolic_bp_mmhg,
+        pulse_bpm=body.pulse_bpm,
+        temperature_c=body.temperature_c,
+        respiration_rate=body.respiration_rate,
+        supplemental_o2=body.supplemental_o2,
+        avpu_alert=body.avpu_alert,
+    )
+    news2 = NEWS2Calculator.calculate(vitals)
+
+    now = datetime.now(UTC)
+    triage_alerts = VetoEngine.evaluate(
+        text_inputs=[],
+        alert_id_generator=uuid4,
+        now=now,
+        vitals={"sys_bp": float(body.systolic_bp_mmhg), "dia_bp": float(body.diastolic_bp_mmhg)},
+        news2_assessment=news2,
+    )
+
+    await session_svc.record_vitals(body.session_id, vitals, news2, now=now)
+
+    log.info(
+        "vitals_intake_processed",
+        session_id=str(body.session_id),
+        news2_score=news2.total_score,
+        news2_risk_band=news2.risk_band,
+    )
+
+    alerts_summary: list[dict[str, object]] = [
+        {
+            "priority": a.priority.value,
+            "rule_name": a.rule_name,
+            "recommended_action": a.recommended_action,
+        }
+        for a in triage_alerts
+    ]
+
+    return RecordVitalsResponse(
+        session_id=body.session_id,
+        news2_score=news2.total_score,
+        news2_risk_band=news2.risk_band,
+        triggers_red_veto=news2.triggers_red_veto,
+        triage_alerts=alerts_summary,
+        message="Vitals recorded and NEWS2 assessment completed",
+    )
+
+
+@router.post("/api/intake/sync-batch", response_model=SyncBatchResponse, status_code=200)
+async def sync_batch_route(
+    body: SyncBatchRequest,
+    current_user: _KioskOrClinicianDep,
+    session_svc: SessionServiceDep,
+    intake_svc: IntakeServiceDep,
+) -> SyncBatchResponse:
+    """Batch reconcile up to 50 offline sessions from IndexedDB store-and-forward.
+
+    Guarantees idempotency on client_session_uuid: existing sessions are returned
+    without row duplication. Reconciled sessions become visible in the live clinician queue.
+    Preserves client offline tokens (OFF-K01-XXXX) and evaluates clinical symptoms.
+    """
+    results: list[SyncedSessionResult] = []
+
+    for payload in body.sessions:
+        # Determine deterministic UUID
+        try:
+            session_uuid = UUID(payload.client_session_uuid)
+        except (ValueError, TypeError):
+            session_uuid = uuid5(NAMESPACE_DNS, payload.client_session_uuid)
+
+        # Determine offline token to preserve
+        offline_token = payload.offline_token or f"OFF-K01-{str(session_uuid)[:4].upper()}"
+
+        # Check existing for idempotency
+        try:
+            existing = await session_svc.get_session(session_uuid)
+            token = existing.token_number or offline_token
+            results.append(
+                SyncedSessionResult(
+                    client_session_uuid=payload.client_session_uuid,
+                    session_id=session_uuid,
+                    token_number=token,
+                    is_existing=True,
+                )
+            )
+            continue
+        except SessionNotFoundError:
+            pass
+
+        # Parse creation timestamp
+        try:
+            created_at = datetime.fromisoformat(payload.created_at_iso)
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+        except Exception:
+            created_at = datetime.now(UTC)
+
+        # Create session
+        created = await session_svc.create_session(
+            session_id=session_uuid,
+            patient_language=payload.language or "en",
+            created_at=created_at,
+            tenant_id=payload.tenant_id or "default",
+            department_id=payload.department_id or "general",
+        )
+
+        # Process and store symptoms in session history so clinical red flags aren't dropped
+        if payload.symptoms:
+            for symptom in payload.symptoms:
+                if symptom and symptom.strip():
+                    try:
+                        await intake_svc.process_response(
+                            session_id=session_uuid,
+                            response_text=symptom.strip(),
+                            confidence=1.0,
+                            now=created_at,
+                        )
+                    except Exception as exc:
+                        log.debug(
+                            "offline_symptom_processing_skipped",
+                            session_id=str(session_uuid),
+                            exc_type=type(exc).__name__,
+                        )
+
+        # If vitals present in offline payload, record them
+        news2 = None
+        if payload.vitals and isinstance(payload.vitals, dict):
+            try:
+                vitals = VitalSigns(
+                    spo2_percent=_safe_int(payload.vitals.get("spo2_percent"), 98),
+                    systolic_bp_mmhg=_safe_int(payload.vitals.get("systolic_bp_mmhg"), 120),
+                    diastolic_bp_mmhg=_safe_int(payload.vitals.get("diastolic_bp_mmhg"), 80),
+                    pulse_bpm=_safe_int(payload.vitals.get("pulse_bpm"), 72),
+                    temperature_c=_safe_float(payload.vitals.get("temperature_c"), 36.8),
+                    respiration_rate=_safe_int(payload.vitals.get("respiration_rate"), 16),
+                    supplemental_o2=_safe_bool(payload.vitals.get("supplemental_o2"), False),
+                    avpu_alert=_safe_bool(payload.vitals.get("avpu_alert"), True),
+                )
+                news2 = NEWS2Calculator.calculate(vitals)
+                created = await session_svc.record_vitals(
+                    session_uuid, vitals, news2, now=created_at
+                )
+            except Exception as exc:
+                log.debug(
+                    "offline_vitals_parse_failed",
+                    session_id=str(session_uuid),
+                    exc_type=type(exc).__name__,
+                )
+
+        # Evaluate VetoEngine across symptoms, vitals, and NEWS2 assessment
+        sys_bp = (
+            _safe_int(payload.vitals.get("systolic_bp_mmhg"), 120)
+            if payload.vitals and isinstance(payload.vitals, dict)
+            else None
+        )
+        dia_bp = (
+            _safe_int(payload.vitals.get("diastolic_bp_mmhg"), 80)
+            if payload.vitals and isinstance(payload.vitals, dict)
+            else None
+        )
+        vitals_dict = (
+            {"sys_bp": float(sys_bp), "dia_bp": float(dia_bp)}
+            if sys_bp is not None and dia_bp is not None
+            else None
+        )
+        batch_alerts = VetoEngine.evaluate(
+            text_inputs=payload.symptoms or [],
+            alert_id_generator=uuid4,
+            now=created_at,
+            vitals=vitals_dict,
+            news2_assessment=news2,
+        )
+        if batch_alerts:
+            try:
+                cached_data = await intake_svc._cache.get(f"intake:{session_uuid}")
+                if cached_data:
+                    intake_obj = json.loads(cached_data)
+                    alerts_list = intake_obj.get("triage_alerts", [])
+                    existing_rules = {
+                        a.get("rule_name") if isinstance(a, dict) else getattr(a, "rule_name", None)
+                        for a in alerts_list
+                    }
+                    for ba in batch_alerts:
+                        if ba.rule_name not in existing_rules:
+                            alerts_list.append(
+                                {
+                                    "priority": ba.priority.value,
+                                    "rule_name": ba.rule_name,
+                                    "recommended_action": ba.recommended_action,
+                                }
+                            )
+                            existing_rules.add(ba.rule_name)
+                    intake_obj["triage_alerts"] = alerts_list
+                    await intake_svc._cache.set(
+                        f"intake:{session_uuid}",
+                        json.dumps(intake_obj),
+                        ttl_seconds=3600,
+                    )
+            except Exception as exc:
+                log.debug(
+                    "offline_cache_alerts_update_failed",
+                    session_id=str(session_uuid),
+                    exc_type=type(exc).__name__,
+                )
+
+        # Transition to completed to assign queue token & wayfinding
+        completed = await session_svc.update_state(
+            created,
+            SessionStatus.COMPLETED,
+            updated_at=datetime.now(UTC),
+        )
+        # Preserve client-minted offline token rather than generated random token
+        completed = completed.model_copy(update={"token_number": offline_token})
+        await session_svc._session_repo.update(completed)
+        token = offline_token
+
+        results.append(
+            SyncedSessionResult(
+                client_session_uuid=payload.client_session_uuid,
+                session_id=session_uuid,
+                token_number=token,
+                is_existing=False,
+            )
+        )
+
+    log.info(
+        "offline_batch_synced",
+        synced_count=len(results),
+        new_count=sum(1 for r in results if not r.is_existing),
+    )
+
+    return SyncBatchResponse(
+        synced_count=len(results),
+        results=results,
+        message=f"Successfully reconciled {len(results)} offline sessions",
+    )

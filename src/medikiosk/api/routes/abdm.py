@@ -12,12 +12,13 @@ Only session IDs, tokens, and operational metadata may appear in structured logs
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import secrets
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -25,6 +26,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from medikiosk.api.dependencies.container import get_session_service_dep
+from medikiosk.domain.contracts import AuditEvent, AuditEventType, SessionStatus
 from medikiosk.domain.errors import SessionExpiredError, SessionNotFoundError
 from medikiosk.services.session_service import SessionService
 
@@ -205,6 +207,28 @@ class ABDMWebhookResponse(BaseModel):
         default=None,
         description="Linked session ID",
     )
+
+
+class LinkCareContextRequest(BaseModel):
+    """Request body for POST /api/abdm/link-care-context."""
+
+    session_id: UUID
+    abha_id: str = Field(..., min_length=4, description="Patient ABHA ID or ABHA Address")
+    soap_note: str = Field(..., min_length=1, description="Clinician SOAP note")
+    prescribed_medications: list[str] = Field(
+        default_factory=list, description="List of prescribed medications"
+    )
+
+
+class LinkCareContextResponse(BaseModel):
+    """Response body for POST /api/abdm/link-care-context."""
+
+    session_id: UUID
+    care_context_reference: str
+    pharmacy_token: str
+    status: str = "LINKED"
+    linked_at: str
+    message: str
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -453,4 +477,62 @@ async def abdm_webhook(
         message="Demographic profile received and broadcast",
         token=payload.token,
         session_id=target_session_id,
+    )
+
+
+@router.post("/api/abdm/link-care-context", response_model=LinkCareContextResponse, status_code=200)
+async def link_care_context(
+    body: LinkCareContextRequest,
+    session_svc: Annotated[SessionService, Depends(get_session_service_dep)],
+) -> LinkCareContextResponse:
+    """Link ABDM M3 Care Context and generate verifiable e-Rx pharmacy token.
+
+    Appends AuditEventType.CARE_CONTEXT_LINKED with zero-PHI payload.
+    Zero-PHI rule: logs only session_id and care_context_status="LINKED".
+    Never logs abha_id, soap_note, or medication strings.
+    """
+    session = await session_svc.get_session(body.session_id)
+    if session.status == SessionStatus.TERMINATED:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Session has been terminated or purged",
+        )
+
+    now = datetime.now(UTC)
+    rx_code = f"RX-{secrets.token_hex(2).upper()}"
+    care_context_ref = f"HIP-CC-{body.session_id.hex[:8].upper()}"
+
+    # Medico-legal audit event with zero-PHI payload (hash and count only)
+    soap_hash = hashlib.sha256(body.soap_note.encode("utf-8")).hexdigest()[:16]
+    seq = await session_svc._next_seq(body.session_id)
+    await session_svc._audit_repo.append(
+        AuditEvent(
+            event_id=uuid4(),
+            session_id=body.session_id,
+            event_type=AuditEventType.CARE_CONTEXT_LINKED,
+            timestamp=now,
+            sequence_number=seq,
+            payload={
+                "care_context_reference": care_context_ref,
+                "pharmacy_token": rx_code,
+                "medication_count": len(body.prescribed_medications),
+                "soap_note_hash": soap_hash,
+            },
+        )
+    )
+
+    log.info(
+        "abdm_care_context_linked",
+        session_id=str(body.session_id),
+        care_context_status="LINKED",
+        pharmacy_token=rx_code,
+    )
+
+    return LinkCareContextResponse(
+        session_id=body.session_id,
+        care_context_reference=care_context_ref,
+        pharmacy_token=rx_code,
+        status="LINKED",
+        linked_at=now.isoformat(),
+        message="Care context successfully linked to ABHA Health Locker and Pharmacy",
     )

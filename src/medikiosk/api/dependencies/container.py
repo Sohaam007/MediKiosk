@@ -240,13 +240,19 @@ def get_storage_dep(
     return LocalStorageAdapter(settings.storage_base_path)
 
 
+_shared_in_memory_cache: InMemoryCacheAdapter | None = None
+
+
 def get_cache_dep() -> CachePort:
     """Provide the in-memory cache adapter.
 
     Returns:
-        InMemoryCacheAdapter.
+        InMemoryCacheAdapter singleton for dev/test fallback.
     """
-    return InMemoryCacheAdapter()
+    global _shared_in_memory_cache
+    if _shared_in_memory_cache is None:
+        _shared_in_memory_cache = InMemoryCacheAdapter()
+    return _shared_in_memory_cache
 
 
 def get_doctor_repo_dep() -> DoctorRepository:
