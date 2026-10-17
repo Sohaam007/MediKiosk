@@ -39,11 +39,13 @@ from medikiosk.api.dependencies.container import (
 )
 from medikiosk.api.schemas.clinician import (
     ClinicianOverviewResponse,
-    ClinicianSessionDetailResponse,
     PagePatientRequest,
     PagePatientResponse,
     QueueEntry,
     QueueResponse,
+)
+from medikiosk.api.schemas.clinician import (
+    ClinicianSessionDetailResponse as BaseClinicianSessionDetailResponse,
 )
 from medikiosk.domain.errors import MediKioskError
 from medikiosk.ports.cache import CachePort
@@ -53,6 +55,15 @@ from medikiosk.services.session_service import SessionService
 log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["clinician"])
+
+
+class ClinicianSessionDetailResponse(BaseClinicianSessionDetailResponse):
+    """Full detail for a patient session including Phase X.2 vitals."""
+
+    news2_score: int | None = None
+    news2_risk_band: str | None = None
+    vitals: dict[str, object] | None = None
+
 
 # ─── Annotated dependency alias ───────────────────────────────────────────────
 
@@ -115,6 +126,12 @@ async def _fetch_queue_response(
                     session_id=str(s.session_id),
                     exc_type=type(exc).__name__,
                 )
+
+        # Escalate priority based on NEWS2 vitals assessment on SessionState
+        if s.news2_risk_band == "HIGH" or (s.news2_score is not None and s.news2_score >= 7):
+            triage_priority = "critical"
+        elif s.news2_risk_band in ("MEDIUM", "LOW_MEDIUM") and triage_priority == "normal":
+            triage_priority = "urgent"
 
         entries.append(
             QueueEntry(
@@ -332,8 +349,6 @@ async def get_session_detail(
     try:
         cached_intake = await cache.get(f"intake:{session.session_id}")
         if cached_intake:
-            import json
-
             intake_data = json.loads(cached_intake)
             triage_alerts = intake_data.get("triage_alerts", [])
             patient_profile = intake_data.get("patient_profile", {})
@@ -346,6 +361,15 @@ async def get_session_detail(
             exc_type=type(exc).__name__,
         )
 
+    vitals_data: dict[str, object] | None = None
+    if session.vitals_json:
+        try:
+            loaded_vitals = json.loads(session.vitals_json)
+            if isinstance(loaded_vitals, dict):
+                vitals_data = loaded_vitals
+        except (json.JSONDecodeError, TypeError, ValueError):
+            vitals_data = None
+
     return ClinicianSessionDetailResponse(
         session_id=str(session.session_id),
         status=session.status.value,
@@ -355,4 +379,7 @@ async def get_session_detail(
         chief_complaint=chief_complaint,
         triage_alerts=triage_alerts,
         timeline_events=timeline_events,
+        news2_score=session.news2_score,
+        news2_risk_band=session.news2_risk_band,
+        vitals=vitals_data,
     )

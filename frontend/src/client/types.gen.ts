@@ -293,6 +293,38 @@ export type ClinicianSessionDetailResponse = {
 };
 
 /**
+ * DepartmentLoad
+ *
+ * Active congestion and estimated wait time for a clinical department.
+ */
+export type DepartmentLoad = {
+    /**
+     * Department
+     *
+     * Department identifier
+     */
+    department: string;
+    /**
+     * Display Name
+     *
+     * Human-readable department name
+     */
+    display_name: string;
+    /**
+     * Active Queue Count
+     *
+     * Active queue depth
+     */
+    active_queue_count: number;
+    /**
+     * Predicted Wait Minutes
+     *
+     * Estimated wait time in minutes
+     */
+    predicted_wait_minutes: number;
+};
+
+/**
  * DoctorListResponse
  *
  * API response for a list of doctors.
@@ -540,6 +572,120 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * LinkCareContextRequest
+ *
+ * Request body for POST /api/abdm/link-care-context.
+ */
+export type LinkCareContextRequest = {
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * Abha Id
+     *
+     * Patient ABHA ID or ABHA Address
+     */
+    abha_id: string;
+    /**
+     * Soap Note
+     *
+     * Clinician SOAP note
+     */
+    soap_note: string;
+    /**
+     * Prescribed Medications
+     *
+     * List of prescribed medications
+     */
+    prescribed_medications?: Array<string>;
+};
+
+/**
+ * LinkCareContextResponse
+ *
+ * Response body for POST /api/abdm/link-care-context.
+ */
+export type LinkCareContextResponse = {
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * Care Context Reference
+     */
+    care_context_reference: string;
+    /**
+     * Pharmacy Token
+     */
+    pharmacy_token: string;
+    /**
+     * Status
+     */
+    status?: string;
+    /**
+     * Linked At
+     */
+    linked_at: string;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * OfflineSessionPayload
+ *
+ * Offline intake payload queued in IndexedDB.
+ */
+export type OfflineSessionPayload = {
+    /**
+     * Client Session Uuid
+     *
+     * Deterministic client session UUID
+     */
+    client_session_uuid: string;
+    /**
+     * Created At Iso
+     *
+     * ISO 8601 creation timestamp
+     */
+    created_at_iso: string;
+    /**
+     * Language
+     *
+     * Selected language code
+     */
+    language?: string;
+    /**
+     * Symptoms
+     *
+     * Patient symptom strings
+     */
+    symptoms?: Array<string>;
+    /**
+     * Vitals
+     *
+     * Optional recorded vitals
+     */
+    vitals?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Tenant Id
+     *
+     * Tenant ID
+     */
+    tenant_id?: string;
+    /**
+     * Department Id
+     *
+     * Department ID
+     */
+    department_id?: string;
 };
 
 /**
@@ -792,6 +938,102 @@ export type QueueResponse = {
 };
 
 /**
+ * RecordVitalsRequest
+ *
+ * Request body for POST /api/intake/vitals.
+ *
+ * Strict physiological bounds matching human survival limits.
+ */
+export type RecordVitalsRequest = {
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * Spo2 Percent
+     *
+     * SpO2 percentage (50-100)
+     */
+    spo2_percent: number;
+    /**
+     * Systolic Bp Mmhg
+     *
+     * Systolic BP (40-300 mmHg)
+     */
+    systolic_bp_mmhg: number;
+    /**
+     * Diastolic Bp Mmhg
+     *
+     * Diastolic BP (20-200 mmHg)
+     */
+    diastolic_bp_mmhg: number;
+    /**
+     * Pulse Bpm
+     *
+     * Pulse rate in bpm (20-250)
+     */
+    pulse_bpm: number;
+    /**
+     * Temperature C
+     *
+     * Temperature in C (30.0-45.0)
+     */
+    temperature_c: number;
+    /**
+     * Respiration Rate
+     *
+     * Respiration rate in bpm (4-60)
+     */
+    respiration_rate?: number;
+    /**
+     * Supplemental O2
+     *
+     * Supplemental O2 active
+     */
+    supplemental_o2?: boolean;
+    /**
+     * Avpu Alert
+     *
+     * Conscious & Alert on AVPU scale
+     */
+    avpu_alert?: boolean;
+};
+
+/**
+ * RecordVitalsResponse
+ *
+ * Response body for POST /api/intake/vitals.
+ */
+export type RecordVitalsResponse = {
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * News2 Score
+     */
+    news2_score: number;
+    /**
+     * News2 Risk Band
+     */
+    news2_risk_band: string;
+    /**
+     * Triggers Red Veto
+     */
+    triggers_red_veto: boolean;
+    /**
+     * Triage Alerts
+     */
+    triage_alerts?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
  * RespondRequest
  *
  * Request body for POST /api/intake/respond.
@@ -1033,6 +1275,142 @@ export type SummarySectionResponse = {
      * Source entities
      */
     source_entities?: Array<string>;
+};
+
+/**
+ * SurgeRadarResponse
+ *
+ * Response payload for GET /api/analytics/surge-radar.
+ */
+export type SurgeRadarResponse = {
+    /**
+     * Timestamp
+     *
+     * UTC ISO timestamp of telemetry snapshot
+     */
+    timestamp: string;
+    /**
+     * Department Loads
+     */
+    department_loads: Array<DepartmentLoad>;
+    /**
+     * Syndromic Clusters
+     */
+    syndromic_clusters: Array<SyndromicCluster>;
+    /**
+     * Vitals Escalation Rate
+     *
+     * Percentage of intakes triggering NEWS2 red veto
+     */
+    vitals_escalation_rate: number;
+    /**
+     * Total Active Intakes
+     *
+     * Total active sessions across wards
+     */
+    total_active_intakes: number;
+    /**
+     * Overall Surge Alert
+     *
+     * True if any syndromic cluster or load breached
+     */
+    overall_surge_alert: boolean;
+};
+
+/**
+ * SyncBatchRequest
+ *
+ * Request body for POST /api/intake/sync-batch. Up to 50 sessions.
+ */
+export type SyncBatchRequest = {
+    /**
+     * Sessions
+     *
+     * Batch of up to 50 offline sessions
+     */
+    sessions: Array<OfflineSessionPayload>;
+};
+
+/**
+ * SyncBatchResponse
+ *
+ * Response body for POST /api/intake/sync-batch.
+ */
+export type SyncBatchResponse = {
+    /**
+     * Synced Count
+     */
+    synced_count: number;
+    /**
+     * Results
+     */
+    results: Array<SyncedSessionResult>;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * SyncedSessionResult
+ *
+ * Result of reconciling a single offline session.
+ */
+export type SyncedSessionResult = {
+    /**
+     * Client Session Uuid
+     */
+    client_session_uuid: string;
+    /**
+     * Session Id
+     */
+    session_id: string;
+    /**
+     * Token Number
+     */
+    token_number: string;
+    /**
+     * Is Existing
+     */
+    is_existing: boolean;
+};
+
+/**
+ * SyndromicCluster
+ *
+ * Epidemiological syndromic outbreak tracking metric.
+ */
+export type SyndromicCluster = {
+    /**
+     * Cluster Name
+     *
+     * Cluster identifier
+     */
+    cluster_name: string;
+    /**
+     * Display Title
+     *
+     * Human-readable clinical syndrome
+     */
+    display_title: string;
+    /**
+     * Count Last 24H
+     *
+     * Intake count within 24-hour window
+     */
+    count_last_24h: number;
+    /**
+     * Threshold
+     *
+     * Outbreak escalation threshold
+     */
+    threshold: number;
+    /**
+     * Surge Alert
+     *
+     * True if cluster exceeds safety threshold
+     */
+    surge_alert: boolean;
 };
 
 /**
@@ -1296,6 +1674,70 @@ export type VerifyPmjayApiIntakeVerifyPmjayPostResponses = {
 };
 
 export type VerifyPmjayApiIntakeVerifyPmjayPostResponse = VerifyPmjayApiIntakeVerifyPmjayPostResponses[keyof VerifyPmjayApiIntakeVerifyPmjayPostResponses];
+
+export type RecordVitalsRouteApiIntakeVitalsPostData = {
+    body: RecordVitalsRequest;
+    path?: never;
+    query?: {
+        /**
+         * Token
+         *
+         * JWT token for SSE/WebSocket clients
+         */
+        token?: string | null;
+    };
+    url: '/api/intake/vitals';
+};
+
+export type RecordVitalsRouteApiIntakeVitalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordVitalsRouteApiIntakeVitalsPostError = RecordVitalsRouteApiIntakeVitalsPostErrors[keyof RecordVitalsRouteApiIntakeVitalsPostErrors];
+
+export type RecordVitalsRouteApiIntakeVitalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecordVitalsResponse;
+};
+
+export type RecordVitalsRouteApiIntakeVitalsPostResponse = RecordVitalsRouteApiIntakeVitalsPostResponses[keyof RecordVitalsRouteApiIntakeVitalsPostResponses];
+
+export type SyncBatchRouteApiIntakeSyncBatchPostData = {
+    body: SyncBatchRequest;
+    path?: never;
+    query?: {
+        /**
+         * Token
+         *
+         * JWT token for SSE/WebSocket clients
+         */
+        token?: string | null;
+    };
+    url: '/api/intake/sync-batch';
+};
+
+export type SyncBatchRouteApiIntakeSyncBatchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SyncBatchRouteApiIntakeSyncBatchPostError = SyncBatchRouteApiIntakeSyncBatchPostErrors[keyof SyncBatchRouteApiIntakeSyncBatchPostErrors];
+
+export type SyncBatchRouteApiIntakeSyncBatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SyncBatchResponse;
+};
+
+export type SyncBatchRouteApiIntakeSyncBatchPostResponse = SyncBatchRouteApiIntakeSyncBatchPostResponses[keyof SyncBatchRouteApiIntakeSyncBatchPostResponses];
 
 export type GetQueueApiClinicianQueueGetData = {
     body?: never;
@@ -1891,6 +2333,31 @@ export type AbdmWebhookApiAbdmWebhookPostResponses = {
 
 export type AbdmWebhookApiAbdmWebhookPostResponse = AbdmWebhookApiAbdmWebhookPostResponses[keyof AbdmWebhookApiAbdmWebhookPostResponses];
 
+export type LinkCareContextApiAbdmLinkCareContextPostData = {
+    body: LinkCareContextRequest;
+    path?: never;
+    query?: never;
+    url: '/api/abdm/link-care-context';
+};
+
+export type LinkCareContextApiAbdmLinkCareContextPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LinkCareContextApiAbdmLinkCareContextPostError = LinkCareContextApiAbdmLinkCareContextPostErrors[keyof LinkCareContextApiAbdmLinkCareContextPostErrors];
+
+export type LinkCareContextApiAbdmLinkCareContextPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LinkCareContextResponse;
+};
+
+export type LinkCareContextApiAbdmLinkCareContextPostResponse = LinkCareContextApiAbdmLinkCareContextPostResponses[keyof LinkCareContextApiAbdmLinkCareContextPostResponses];
+
 export type GenerateSummaryApiSummaryGeneratePostData = {
     body: GenerateSummaryRequest;
     path?: never;
@@ -1996,3 +2463,35 @@ export type GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses = {
 };
 
 export type GetFhirBundleBySessionApiFhirSessionSessionIdGetResponse = GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses[keyof GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses];
+
+export type GetSurgeRadarApiAnalyticsSurgeRadarGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Token
+         *
+         * JWT token for SSE/WebSocket clients
+         */
+        token?: string | null;
+    };
+    url: '/api/analytics/surge-radar';
+};
+
+export type GetSurgeRadarApiAnalyticsSurgeRadarGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSurgeRadarApiAnalyticsSurgeRadarGetError = GetSurgeRadarApiAnalyticsSurgeRadarGetErrors[keyof GetSurgeRadarApiAnalyticsSurgeRadarGetErrors];
+
+export type GetSurgeRadarApiAnalyticsSurgeRadarGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SurgeRadarResponse;
+};
+
+export type GetSurgeRadarApiAnalyticsSurgeRadarGetResponse = GetSurgeRadarApiAnalyticsSurgeRadarGetResponses[keyof GetSurgeRadarApiAnalyticsSurgeRadarGetResponses];

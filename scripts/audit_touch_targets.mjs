@@ -16,7 +16,11 @@ const filesToAudit = [
   'frontend/src/components/AyushSahayakAvatar.tsx',
   'frontend/src/components/KioskStepperHeader.tsx',
   'frontend/src/components/NanoBanner.tsx',
-  'frontend/src/components/ErrorBoundary.tsx'
+  'frontend/src/components/ErrorBoundary.tsx',
+  'frontend/src/components/VitalsCapturePanel.tsx',
+  'frontend/src/components/HospitalWayfinderMap.tsx',
+  'frontend/src/components/ThermalReceiptSlip.tsx',
+  'frontend/src/components/SurgeRadarModal.tsx'
 ];
 
 console.log('=== SYSTEMATIC AUDIT OF TOUCH TARGETS (48x48px) ===\n');
@@ -358,3 +362,6 @@ if (nonCompliantElements.length > 0) {
 } else {
   console.log('\n[PASS] All interactive elements satisfy minimum 48x48px touch targets!');
 }
+
+process.exit(nonCompliantElements.length > 0 ? 1 : 0);
+

@@ -105,6 +105,15 @@ class SessionState(BaseModel):
     )
     total_fees_inr: int = Field(default=0, description="Total fees in INR")
 
+    # Phase X.2 Wave 14 Vitals & NEWS2 fields
+    news2_score: int | None = Field(
+        default=None, ge=0, le=20, description="Calculated aggregate NEWS2 score (0-20)"
+    )
+    news2_risk_band: str | None = Field(
+        default=None, description="NEWS2 risk band ('LOW', 'LOW_MEDIUM', 'MEDIUM', 'HIGH')"
+    )
+    vitals_json: str | None = Field(default=None, description="Serialized VitalSigns JSON snapshot")
+
     @model_validator(mode="after")
     def _require_proxy_relationship(self) -> SessionState:
         """Enforce that proxy sessions always record who the proxy is."""

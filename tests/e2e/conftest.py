@@ -8,6 +8,7 @@ from medikiosk.api.dependencies.auth import (
     require_kiosk_or_clinician,
 )
 from medikiosk.api.dependencies.container import (
+    get_cache_dep,
     get_document_repo_dep,
     get_engine_dep,
     get_fhir_repo_dep,
@@ -184,6 +185,7 @@ def app_kiosk():
     app = create_app()
     app.dependency_overrides[get_session_service_dep] = get_fake_session_service
     app.dependency_overrides[get_intake_service_dep] = get_fake_intake_service
+    app.dependency_overrides[get_cache_dep] = lambda: fake_cache
     app.dependency_overrides[get_summary_service_dep] = get_fake_summary_service
     app.dependency_overrides[get_summary_repo_dep] = get_fake_summary_repo
     app.dependency_overrides[get_fhir_repo_dep] = get_fake_fhir_repo
@@ -206,6 +208,7 @@ def app_no_auth():
     app = create_app()
     app.dependency_overrides[get_session_service_dep] = get_fake_session_service
     app.dependency_overrides[get_intake_service_dep] = get_fake_intake_service
+    app.dependency_overrides[get_cache_dep] = lambda: fake_cache
     app.dependency_overrides[get_engine_dep] = get_fake_engine
     # Do NOT override require_kiosk_or_clinician — auth is real
     return app

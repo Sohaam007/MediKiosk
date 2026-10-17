@@ -51,6 +51,8 @@ class AuditEventType(str, Enum):
 
     BILLING_STATUS_UPDATED = "billing_status_updated"
     PATIENT_PAGED = "patient_paged"
+    VITALS_RECORDED = "vitals_recorded"
+    CARE_CONTEXT_LINKED = "care_context_linked"
 
 
 class AuditEvent(BaseModel):

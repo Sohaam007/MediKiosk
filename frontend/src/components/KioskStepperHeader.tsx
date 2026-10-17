@@ -24,29 +24,32 @@ export const KioskStepperHeader: React.FC<KioskStepperHeaderProps> = ({
 
   const steps = [
     { id: 'language', label: '1. Language' },
-    { id: 'registration', label: '2. Details' },
-    { id: 'conversation', label: '3. Voice Intake' },
-    { id: 'documents', label: '4. Documents' },
-    { id: 'services', label: '5. Services' },
-    { id: 'completed', label: '6. Token' },
+    { id: 'registration', label: '2. Identity' },
+    { id: 'vitals', label: '3. Vitals' },
+    { id: 'conversation', label: '4. Voice Intake' },
+    { id: 'documents', label: '5. Documents' },
+    { id: 'services', label: '6. Services' },
+    { id: 'completed', label: '7. Token' },
   ];
 
   const getProgressWidth = () => {
     switch (currentStep) {
       case 'language':
-        return '15%';
+        return '14%';
       case 'registration':
-        return '30%';
+        return '28%';
+      case 'vitals':
+        return '42%';
       case 'conversation':
-        return `${Math.max(30, Math.min(70, Math.round(intakeProgress * 100)))}%`;
+        return `${Math.max(42, Math.min(70, Math.round(intakeProgress * 100)))}%`;
       case 'documents':
-        return '75%';
+        return '78%';
       case 'services':
         return '90%';
       case 'completed':
         return '100%';
       default:
-        return '15%';
+        return '14%';
     }
   };
 

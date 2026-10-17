@@ -284,6 +284,90 @@ async def test_session_repo_persists_billing_and_wayfinding_fields(db_session_fa
 
 
 @pytest.mark.asyncio
+async def test_session_repo_persists_vitals_and_news2_round_trip(db_session_factory) -> None:
+    """Verify SQLSessionRepository cleanly round-trips vitals and NEWS2 fields."""
+    import dataclasses
+    import json
+
+    from medikiosk.domain.vitals import VitalSigns
+
+    factory = db_session_factory
+    session_id = uuid4()
+    vitals = VitalSigns(
+        spo2_percent=91,
+        systolic_bp_mmhg=88,
+        diastolic_bp_mmhg=58,
+        pulse_bpm=128,
+        temperature_c=39.2,
+        respiration_rate=26,
+        supplemental_o2=True,
+        avpu_alert=True,
+    )
+    vitals_json = json.dumps(dataclasses.asdict(vitals))
+
+    domain_session = SessionState(
+        session_id=session_id,
+        patient_language="hi",
+        created_at=NOW,
+        status=SessionStatus.ACTIVE,
+        news2_score=11,
+        news2_risk_band="HIGH",
+        vitals_json=vitals_json,
+    )
+    async with factory() as db:
+        repo = SQLSessionRepository(db)
+        await repo.create(domain_session)
+
+        # Retrieve and verify all vitals fields are preserved
+        fetched = await repo.get(session_id)
+        assert fetched is not None
+        assert fetched.session_id == session_id
+        assert fetched.news2_score == 11
+        assert fetched.news2_risk_band == "HIGH"
+        assert fetched.vitals_json is not None
+
+        # Deserialise vitals_json back to VitalSigns and assert parity
+        reconstructed_vitals = VitalSigns(**json.loads(fetched.vitals_json))
+        assert reconstructed_vitals.spo2_percent == 91
+        assert reconstructed_vitals.systolic_bp_mmhg == 88
+        assert reconstructed_vitals.diastolic_bp_mmhg == 58
+        assert reconstructed_vitals.pulse_bpm == 128
+        assert reconstructed_vitals.temperature_c == 39.2
+        assert reconstructed_vitals.respiration_rate == 26
+        assert reconstructed_vitals.supplemental_o2 is True
+        assert reconstructed_vitals.avpu_alert is True
+
+        # Test updating vitals via repo.update
+        updated_vitals = VitalSigns(
+            spo2_percent=98,
+            systolic_bp_mmhg=120,
+            diastolic_bp_mmhg=80,
+            pulse_bpm=72,
+            temperature_c=36.8,
+            respiration_rate=16,
+            supplemental_o2=False,
+            avpu_alert=True,
+        )
+        updated_json = json.dumps(dataclasses.asdict(updated_vitals))
+        updated_session = fetched.model_copy(
+            update={
+                "news2_score": 0,
+                "news2_risk_band": "LOW",
+                "vitals_json": updated_json,
+            }
+        )
+        await repo.update(updated_session)
+
+        # Re-fetch and verify update persisted
+        re_fetched = await repo.get(session_id)
+        assert re_fetched is not None
+        assert re_fetched.news2_score == 0
+        assert re_fetched.news2_risk_band == "LOW"
+        assert re_fetched.vitals_json == updated_json
+        await db.commit()
+
+
+@pytest.mark.asyncio
 async def test_session_repo_get_missing_returns_none(db_session_factory) -> None:
     async with db_session_factory() as db:
         repo = SQLSessionRepository(db)

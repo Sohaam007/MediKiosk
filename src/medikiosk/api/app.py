@@ -210,6 +210,7 @@ def create_app() -> FastAPI:
 
     from medikiosk.api.routes import (
         abdm,
+        analytics,
         auth,
         clinician,
         doctor,
@@ -231,6 +232,7 @@ def create_app() -> FastAPI:
     app.include_router(speech.router)
     app.include_router(abdm.router)
     app.include_router(summary.router)
+    app.include_router(analytics.router)
 
     log.info("app_created", title="MediKiosk", version="0.2.0")
     return app

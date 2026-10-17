@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AbdmEventsBySessionApiAbdmEventsSessionIdGetData, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsQueryApiAbdmEventsGetData, AbdmEventsQueryApiAbdmEventsGetErrors, AbdmEventsQueryApiAbdmEventsGetResponses, AbdmWebhookApiAbdmWebhookPostData, AbdmWebhookApiAbdmWebhookPostErrors, AbdmWebhookApiAbdmWebhookPostResponses, GenerateAbdmQrApiAbdmGenerateQrGetData, GenerateAbdmQrApiAbdmGenerateQrGetErrors, GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateSummaryApiSummaryGeneratePostData, GenerateSummaryApiSummaryGeneratePostErrors, GenerateSummaryApiSummaryGeneratePostResponses, GenerateTokenApiAuthTokenPostData, GenerateTokenApiAuthTokenPostErrors, GenerateTokenApiAuthTokenPostResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetData, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetOverviewApiClinicianOverviewGetData, GetOverviewApiClinicianOverviewGetErrors, GetOverviewApiClinicianOverviewGetResponses, GetQueueApiClinicianQueueGetData, GetQueueApiClinicianQueueGetErrors, GetQueueApiClinicianQueueGetResponses, GetSessionDetailApiClinicianSessionSessionIdGetData, GetSessionDetailApiClinicianSessionSessionIdGetErrors, GetSessionDetailApiClinicianSessionSessionIdGetResponses, GetSummaryBySessionApiSummarySessionSessionIdGetData, GetSummaryBySessionApiSummarySessionSessionIdGetErrors, GetSummaryBySessionApiSummarySessionSessionIdGetResponses, HealthCheckApiHealthGetData, HealthCheckApiHealthGetResponses, ListDoctorsApiDoctorsGetData, ListDoctorsApiDoctorsGetErrors, ListDoctorsApiDoctorsGetResponses, ListPackagesApiPackagesGetData, ListPackagesApiPackagesGetErrors, ListPackagesApiPackagesGetResponses, ListSessionDocumentsApiDocumentsSessionSessionIdGetData, ListSessionDocumentsApiDocumentsSessionSessionIdGetErrors, ListSessionDocumentsApiDocumentsSessionSessionIdGetResponses, PagePatientApiClinicianQueuePagePatientPostData, PagePatientApiClinicianQueuePagePatientPostErrors, PagePatientApiClinicianQueuePagePatientPostResponses, PurgeSessionApiSessionPurgePostData, PurgeSessionApiSessionPurgePostErrors, PurgeSessionApiSessionPurgePostResponses, QueueLiveStreamApiClinicianQueueLiveGetData, QueueLiveStreamApiClinicianQueueLiveGetErrors, QueueLiveStreamApiClinicianQueueLiveGetResponses, RespondApiIntakeRespondPostData, RespondApiIntakeRespondPostErrors, RespondApiIntakeRespondPostResponses, SelectDoctorApiIntakeSelectDoctorPostData, SelectDoctorApiIntakeSelectDoctorPostErrors, SelectDoctorApiIntakeSelectDoctorPostResponses, SelectPackageApiIntakeSelectPackagePostData, SelectPackageApiIntakeSelectPackagePostErrors, SelectPackageApiIntakeSelectPackagePostResponses, StartSessionApiIntakeStartPostData, StartSessionApiIntakeStartPostErrors, StartSessionApiIntakeStartPostResponses, TranscribeAudioApiSpeechTranscribePostData, TranscribeAudioApiSpeechTranscribePostErrors, TranscribeAudioApiSpeechTranscribePostResponses, UploadDocumentApiDocumentsUploadPostData, UploadDocumentApiDocumentsUploadPostErrors, UploadDocumentApiDocumentsUploadPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostData, VerifyPmjayApiIntakeVerifyPmjayPostErrors, VerifyPmjayApiIntakeVerifyPmjayPostResponses } from './types.gen';
+import type { AbdmEventsBySessionApiAbdmEventsSessionIdGetData, AbdmEventsBySessionApiAbdmEventsSessionIdGetErrors, AbdmEventsBySessionApiAbdmEventsSessionIdGetResponses, AbdmEventsQueryApiAbdmEventsGetData, AbdmEventsQueryApiAbdmEventsGetErrors, AbdmEventsQueryApiAbdmEventsGetResponses, AbdmWebhookApiAbdmWebhookPostData, AbdmWebhookApiAbdmWebhookPostErrors, AbdmWebhookApiAbdmWebhookPostResponses, GenerateAbdmQrApiAbdmGenerateQrGetData, GenerateAbdmQrApiAbdmGenerateQrGetErrors, GenerateAbdmQrApiAbdmGenerateQrGetResponses, GenerateSummaryApiSummaryGeneratePostData, GenerateSummaryApiSummaryGeneratePostErrors, GenerateSummaryApiSummaryGeneratePostResponses, GenerateTokenApiAuthTokenPostData, GenerateTokenApiAuthTokenPostErrors, GenerateTokenApiAuthTokenPostResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetData, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetOverviewApiClinicianOverviewGetData, GetOverviewApiClinicianOverviewGetErrors, GetOverviewApiClinicianOverviewGetResponses, GetQueueApiClinicianQueueGetData, GetQueueApiClinicianQueueGetErrors, GetQueueApiClinicianQueueGetResponses, GetSessionDetailApiClinicianSessionSessionIdGetData, GetSessionDetailApiClinicianSessionSessionIdGetErrors, GetSessionDetailApiClinicianSessionSessionIdGetResponses, GetSummaryBySessionApiSummarySessionSessionIdGetData, GetSummaryBySessionApiSummarySessionSessionIdGetErrors, GetSummaryBySessionApiSummarySessionSessionIdGetResponses, GetSurgeRadarApiAnalyticsSurgeRadarGetData, GetSurgeRadarApiAnalyticsSurgeRadarGetErrors, GetSurgeRadarApiAnalyticsSurgeRadarGetResponses, HealthCheckApiHealthGetData, HealthCheckApiHealthGetResponses, LinkCareContextApiAbdmLinkCareContextPostData, LinkCareContextApiAbdmLinkCareContextPostErrors, LinkCareContextApiAbdmLinkCareContextPostResponses, ListDoctorsApiDoctorsGetData, ListDoctorsApiDoctorsGetErrors, ListDoctorsApiDoctorsGetResponses, ListPackagesApiPackagesGetData, ListPackagesApiPackagesGetErrors, ListPackagesApiPackagesGetResponses, ListSessionDocumentsApiDocumentsSessionSessionIdGetData, ListSessionDocumentsApiDocumentsSessionSessionIdGetErrors, ListSessionDocumentsApiDocumentsSessionSessionIdGetResponses, PagePatientApiClinicianQueuePagePatientPostData, PagePatientApiClinicianQueuePagePatientPostErrors, PagePatientApiClinicianQueuePagePatientPostResponses, PurgeSessionApiSessionPurgePostData, PurgeSessionApiSessionPurgePostErrors, PurgeSessionApiSessionPurgePostResponses, QueueLiveStreamApiClinicianQueueLiveGetData, QueueLiveStreamApiClinicianQueueLiveGetErrors, QueueLiveStreamApiClinicianQueueLiveGetResponses, RecordVitalsRouteApiIntakeVitalsPostData, RecordVitalsRouteApiIntakeVitalsPostErrors, RecordVitalsRouteApiIntakeVitalsPostResponses, RespondApiIntakeRespondPostData, RespondApiIntakeRespondPostErrors, RespondApiIntakeRespondPostResponses, SelectDoctorApiIntakeSelectDoctorPostData, SelectDoctorApiIntakeSelectDoctorPostErrors, SelectDoctorApiIntakeSelectDoctorPostResponses, SelectPackageApiIntakeSelectPackagePostData, SelectPackageApiIntakeSelectPackagePostErrors, SelectPackageApiIntakeSelectPackagePostResponses, StartSessionApiIntakeStartPostData, StartSessionApiIntakeStartPostErrors, StartSessionApiIntakeStartPostResponses, SyncBatchRouteApiIntakeSyncBatchPostData, SyncBatchRouteApiIntakeSyncBatchPostErrors, SyncBatchRouteApiIntakeSyncBatchPostResponses, TranscribeAudioApiSpeechTranscribePostData, TranscribeAudioApiSpeechTranscribePostErrors, TranscribeAudioApiSpeechTranscribePostResponses, UploadDocumentApiDocumentsUploadPostData, UploadDocumentApiDocumentsUploadPostErrors, UploadDocumentApiDocumentsUploadPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostData, VerifyPmjayApiIntakeVerifyPmjayPostErrors, VerifyPmjayApiIntakeVerifyPmjayPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -143,6 +143,42 @@ export const purgeSessionApiSessionPurgePost = <ThrowOnError extends boolean = f
 export const verifyPmjayApiIntakeVerifyPmjayPost = <ThrowOnError extends boolean = false>(options: Options<VerifyPmjayApiIntakeVerifyPmjayPostData, ThrowOnError>): RequestResult<VerifyPmjayApiIntakeVerifyPmjayPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostErrors, ThrowOnError> => (options.client ?? client).post<VerifyPmjayApiIntakeVerifyPmjayPostResponses, VerifyPmjayApiIntakeVerifyPmjayPostErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/intake/verify-pmjay',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Record Vitals Route
+ *
+ * Record patient physiological vital signs and calculate NEWS2 score.
+ *
+ * Evaluates Royal College of Physicians NEWS2 standard and clinical veto rules.
+ * Logs zero-PHI: records session_id, news2_score, and news2_risk_band only.
+ */
+export const recordVitalsRouteApiIntakeVitalsPost = <ThrowOnError extends boolean = false>(options: Options<RecordVitalsRouteApiIntakeVitalsPostData, ThrowOnError>): RequestResult<RecordVitalsRouteApiIntakeVitalsPostResponses, RecordVitalsRouteApiIntakeVitalsPostErrors, ThrowOnError> => (options.client ?? client).post<RecordVitalsRouteApiIntakeVitalsPostResponses, RecordVitalsRouteApiIntakeVitalsPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/intake/vitals',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Sync Batch Route
+ *
+ * Batch reconcile up to 50 offline sessions from IndexedDB store-and-forward.
+ *
+ * Guarantees idempotency on client_session_uuid: existing sessions are returned
+ * without row duplication. Reconciled sessions become visible in the live clinician queue.
+ */
+export const syncBatchRouteApiIntakeSyncBatchPost = <ThrowOnError extends boolean = false>(options: Options<SyncBatchRouteApiIntakeSyncBatchPostData, ThrowOnError>): RequestResult<SyncBatchRouteApiIntakeSyncBatchPostResponses, SyncBatchRouteApiIntakeSyncBatchPostErrors, ThrowOnError> => (options.client ?? client).post<SyncBatchRouteApiIntakeSyncBatchPostResponses, SyncBatchRouteApiIntakeSyncBatchPostErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/intake/sync-batch',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -363,6 +399,24 @@ export const abdmWebhookApiAbdmWebhookPost = <ThrowOnError extends boolean = fal
 });
 
 /**
+ * Link Care Context
+ *
+ * Link ABDM M3 Care Context and generate verifiable e-Rx pharmacy token.
+ *
+ * Appends AuditEventType.CARE_CONTEXT_LINKED with zero-PHI payload.
+ * Zero-PHI rule: logs only session_id and care_context_status="LINKED".
+ * Never logs abha_id, soap_note, or medication strings.
+ */
+export const linkCareContextApiAbdmLinkCareContextPost = <ThrowOnError extends boolean = false>(options: Options<LinkCareContextApiAbdmLinkCareContextPostData, ThrowOnError>): RequestResult<LinkCareContextApiAbdmLinkCareContextPostResponses, LinkCareContextApiAbdmLinkCareContextPostErrors, ThrowOnError> => (options.client ?? client).post<LinkCareContextApiAbdmLinkCareContextPostResponses, LinkCareContextApiAbdmLinkCareContextPostErrors, ThrowOnError>({
+    url: '/api/abdm/link-care-context',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Generate Summary
  *
  * Generate bilingual clinical summary and FHIR R4 Bundle for a session.
@@ -396,5 +450,18 @@ export const getSummaryBySessionApiSummarySessionSessionIdGet = <ThrowOnError ex
 export const getFhirBundleBySessionApiFhirSessionSessionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFhirBundleBySessionApiFhirSessionSessionIdGetData, ThrowOnError>): RequestResult<GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFhirBundleBySessionApiFhirSessionSessionIdGetResponses, GetFhirBundleBySessionApiFhirSessionSessionIdGetErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/fhir/session/{session_id}',
+    ...options
+});
+
+/**
+ * Get Surge Radar
+ *
+ * Return real-time, k-anonymous epidemiological surge and command radar telemetry.
+ *
+ * Zero-PHI: Never exposes individual patient identities, symptoms, or diagnoses.
+ */
+export const getSurgeRadarApiAnalyticsSurgeRadarGet = <ThrowOnError extends boolean = false>(options?: Options<GetSurgeRadarApiAnalyticsSurgeRadarGetData, ThrowOnError>): RequestResult<GetSurgeRadarApiAnalyticsSurgeRadarGetResponses, GetSurgeRadarApiAnalyticsSurgeRadarGetErrors, ThrowOnError> => (options?.client ?? client).get<GetSurgeRadarApiAnalyticsSurgeRadarGetResponses, GetSurgeRadarApiAnalyticsSurgeRadarGetErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/analytics/surge-radar',
     ...options
 });

@@ -72,6 +72,11 @@ class SessionState(BaseModel):
     )
     total_fees_inr: int = Field(0, description="Total fees in INR.")
 
+    # ── Waves 14–18: Vitals, NEWS2 & Clinical Intake Acuity ──────────
+    news2_score: int | None = Field(None, description="Aggregate NEWS2 vital score (0-20).")
+    news2_risk_band: str | None = Field(None, description="NEWS2 risk level: LOW, LOW_MEDIUM, MEDIUM, HIGH.")
+    vitals_json: str | None = Field(None, description="JSON-serialized physiological vitals snapshot.")
+
     @model_validator(mode="after")
     def validate_proxy_relationship(self) -> "SessionState":
         """Enforce that proxy sessions always record who the proxy is."""
@@ -537,6 +542,8 @@ class AuditEventType(str, Enum):
     SUMMARY_GENERATED = "summary_generated"  # summary_id
     FHIR_BUNDLE_CREATED = "fhir_bundle_created"  # bundle_id, transcript_hash
     ABDM_PUSH_ATTEMPTED = "abdm_push_attempted"  # success/failure
+    VITALS_RECORDED = "vitals_recorded"  # session_id, news2_score, risk_band
+    CARE_CONTEXT_LINKED = "care_context_linked"  # session_id, rx_token
     SESSION_COMPLETED = "session_completed"
     WALK_AWAY_DETECTED = "walk_away_detected"  # fires at 15s no-presence (the trigger)
     SESSION_PURGED = "session_purged"  # fires after purge completes (the effect)

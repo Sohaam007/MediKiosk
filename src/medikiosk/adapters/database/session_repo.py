@@ -53,6 +53,9 @@ class SQLSessionRepository:
             selected_doctor_id=doc_id,
             selected_package_ids=pkg_json,
             predicted_wait_seconds=domain.predicted_wait_seconds,
+            news2_score=domain.news2_score,
+            news2_risk_band=domain.news2_risk_band,
+            vitals_json=domain.vitals_json,
         )
 
     @staticmethod
@@ -92,6 +95,9 @@ class SQLSessionRepository:
             selected_doctor_id=UUID(model.selected_doctor_id) if model.selected_doctor_id else None,
             selected_package_ids=selected_package_ids,
             predicted_wait_seconds=model.predicted_wait_seconds,
+            news2_score=model.news2_score,
+            news2_risk_band=model.news2_risk_band,
+            vitals_json=model.vitals_json,
         )
 
     async def create(self, session: SessionState) -> SessionState:
@@ -143,6 +149,9 @@ class SQLSessionRepository:
             model.selected_doctor_id = doc_id
             model.selected_package_ids = pkg_json
             model.predicted_wait_seconds = session.predicted_wait_seconds
+            model.news2_score = session.news2_score
+            model.news2_risk_band = session.news2_risk_band
+            model.vitals_json = session.vitals_json
             await self._session.flush()
             log.info("session_updated", session_id=str(session.session_id))
             return session

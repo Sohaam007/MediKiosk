@@ -28,12 +28,17 @@ import {
   Printer,
   CreditCard,
   ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { EmergencyAlertModal } from '../components/EmergencyAlertModal';
 import { DocumentScanner } from '../components/DocumentScanner';
 import { KioskStepperHeader } from '../components/KioskStepperHeader';
+import { VitalsCapturePanel, type VitalsData, type NEWS2Result } from '../components/VitalsCapturePanel';
+import { HospitalWayfinderMap } from '../components/HospitalWayfinderMap';
+import { ThermalReceiptSlip } from '../components/ThermalReceiptSlip';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useTimer } from '../hooks/useTimer';
 import { useVoiceInput, type SupportedLocale } from '../hooks/useVoiceInput';
 import { useTTS } from '../hooks/useTTS';
@@ -64,7 +69,7 @@ import {
 } from '../client/sdk.gen';
 import type { DoctorResponse, PackageResponse } from '../client/types.gen';
 
-type Step = 'language' | 'registration' | 'conversation' | 'documents' | 'services' | 'completed';
+type Step = 'language' | 'registration' | 'vitals' | 'conversation' | 'documents' | 'services' | 'completed';
 
 const INFORMANTS = [
   { id: 'patient', label: 'Patient (Self)', labelHi: 'मरीज (स्वयं)', icon: User },
@@ -229,6 +234,11 @@ export function KioskIntakeView() {
   const [evaluatedRiskScore, setEvaluatedRiskScore] = useState<number>(24);
   const [triagePriorityLevel, setTriagePriorityLevel] = useState<'critical' | 'urgent' | 'normal'>('normal');
   const [isAutoTransitioning, setIsAutoTransitioning] = useState<boolean>(false);
+
+  // Wave 14 & 15 Vitals & Offline Sync State
+  const [recordedVitals, setRecordedVitals] = useState<VitalsData | null>(null);
+  const [news2Result, setNews2Result] = useState<NEWS2Result | null>(null);
+  const { isOnline, isSyncing, pendingCount, flushQueue, queueOfflineSession } = useOfflineSync();
 
   // Hook-powered Live Timer (resettable)
   const { seconds: elapsedTime, reset: resetTimer } = useTimer();
@@ -628,7 +638,7 @@ export function KioskIntakeView() {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
-      setCurrentStep('conversation');
+      setCurrentStep('vitals');
     }
   };
 
@@ -1072,6 +1082,18 @@ export function KioskIntakeView() {
       // ignore storage error
     }
 
+    // Wave 15: If kiosk is offline or network disconnected, queue for IndexedDB store-and-forward batch reconciliation
+    if (!isOnline || !sessionId) {
+      void queueOfflineSession({
+        client_session_uuid: sessionId || `off_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        created_at_iso: new Date().toISOString(),
+        language: selectedLanguage,
+        symptoms: messages.filter((m) => m.sender === 'patient').map((m) => m.text),
+        vitals: recordedVitals || undefined,
+        department_id: activeDoc.department.toLowerCase(),
+      });
+    }
+
     setCurrentStep('completed');
   };
 
@@ -1227,6 +1249,28 @@ export function KioskIntakeView() {
       )}
 
       <main className="flex-1 p-4 md:p-8 flex flex-col items-center justify-start w-full max-w-6xl mx-auto">
+        {/* Wave 15: Offline Edge Mode Banner */}
+        {(!isOnline || pendingCount > 0) && (
+          <div className="w-full bg-[#DC2626] text-white px-5 py-3.5 rounded-2xl font-bold flex items-center justify-between shadow-lg mb-6 border-2 border-white/30 text-xs sm:text-sm">
+            <div className="flex items-center gap-2.5">
+              <Zap className="w-5 h-5 text-amber-300 animate-pulse shrink-0" />
+              <span>
+                ⚡ Offline Edge Mode Active — Queued Locally ({pendingCount} pending) & Auto-Syncing
+              </span>
+            </div>
+            {pendingCount > 0 && isOnline && (
+              <button
+                type="button"
+                onClick={() => flushQueue()}
+                disabled={isSyncing}
+                className="min-h-[48px] px-4 py-2 bg-white text-red-900 rounded-xl font-black text-xs hover:bg-slate-100 transition active:scale-[0.98]"
+              >
+                {isSyncing ? 'Syncing...' : 'Sync Now'}
+              </button>
+            )}
+          </div>
+        )}
+
         {emergencyLockdown ? (
           <div className="w-full max-w-3xl mx-auto bg-red-50 border-4 border-red-600 rounded-3xl p-8 md:p-10 shadow-2xl text-center space-y-6">
             <div className="w-20 h-20 bg-red-600 text-white rounded-full flex items-center justify-center mx-auto shadow-lg animate-bounce">
@@ -1773,6 +1817,25 @@ export function KioskIntakeView() {
                 )}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* STAGE: IOT VITALS PERIPHERALS & NEWS2 ACUITY */}
+        {currentStep === 'vitals' && (
+          <div className="w-full max-w-4xl mx-auto">
+            <VitalsCapturePanel
+              sessionId={sessionId}
+              onVitalsRecorded={(vitalsData, result) => {
+                setRecordedVitals(vitalsData);
+                setNews2Result(result);
+                if (result.triggers_red_veto) {
+                  setTriagePriorityLevel('critical');
+                  setShowEmergencyModal(true);
+                }
+                setCurrentStep('conversation');
+              }}
+              onSkip={() => setCurrentStep('conversation')}
+            />
           </div>
         )}
 
@@ -2647,6 +2710,30 @@ export function KioskIntakeView() {
                 </div>
               </div>
             </div>
+
+            {/* Wave 17: Interactive 2D SVG Hospital Wayfinder Floor Map */}
+            <HospitalWayfinderMap
+              chamberRoom={activeDoctor.chamber_room || 'Room 102, Heart Center'}
+              triagePriority={triagePriorityLevel}
+              patientLanguage={selectedLanguage}
+            />
+
+            {/* Wave 17: Dedicated 80mm Thermal Receipt Slip Layout */}
+            <ThermalReceiptSlip
+              tokenNumber={tokenNumber || '#A-104'}
+              patientName={patientName || 'PATIENT ENCOUNTER'}
+              department={activeDoctor.department}
+              chamberRoom={activeDoctor.chamber_room || 'OPD Chamber 102'}
+              doctorName={activeDoctor.full_name}
+              triagePriority={triagePriorityLevel.toUpperCase()}
+              news2Score={news2Result?.total_score || 0}
+              vitalsSummary={
+                recordedVitals
+                  ? `SpO2: ${recordedVitals.spo2_percent}% | BP: ${recordedVitals.systolic_bp_mmhg}/${recordedVitals.diastolic_bp_mmhg} | Pulse: ${recordedVitals.pulse_bpm}`
+                  : undefined
+              }
+              wayfindingDirections={`Proceed via corridors to ${activeDoctor.chamber_room || 'Chamber 102'}`}
+            />
 
             {/* Action CTAs: Print Slip & WhatsApp */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
